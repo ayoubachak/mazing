@@ -7,7 +7,7 @@ import {
   runBFS, 
   runDFS 
 } from '../algorithms/pathfinding';
-import { generateRandomMaze, generateRecursiveDivisionMaze } from '../algorithms/mazeGeneration';
+import { generateRandomMaze, generateRecursiveDivisionMaze, generateDFSMaze, generatePrimsMaze, generateKruskalMaze } from '../algorithms/mazeGeneration';
 import NodeComponent from './NodeComponent';
 import Toolbar from './Toolbar';
 import Legend from './Legend';
@@ -674,11 +674,15 @@ export default function MazeVisualizer() {
     setFoodNodes([]);
     // Generate and apply maze
     if (type === 'random') {
-      const newGrid = generateRandomMaze([...grid], startNode, finishNode);
-      initializeGrid(newGrid);
+      initializeGrid(generateRandomMaze([...grid], startNode, finishNode));
     } else if (type === 'recursiveDivision') {
-      const newGrid = generateRecursiveDivisionMaze([...grid], startNode, finishNode, rows, cols);
-      initializeGrid(newGrid);
+      initializeGrid(generateRecursiveDivisionMaze([...grid], startNode, finishNode, rows, cols));
+    } else if (type === 'dfs') {
+      initializeGrid(generateDFSMaze([...grid], startNode, finishNode));
+    } else if (type === 'prims') {
+      initializeGrid(generatePrimsMaze([...grid], startNode, finishNode));
+    } else if (type === 'kruskal') {
+      initializeGrid(generateKruskalMaze([...grid], startNode, finishNode));
     }
   };
 

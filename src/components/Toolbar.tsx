@@ -35,7 +35,10 @@ const Toolbar: React.FC<ToolbarProps> = ({
     },
     mazes: {
       random: "Generate a maze with randomly placed walls",
-      recursiveDivision: "Generate a more structured maze using recursive division algorithm"
+      recursiveDivision: "Generate a more structured maze using recursive division algorithm",
+      dfs: "Generate a maze using depth-first search backtracking (perfect maze)",
+      prims: "Generate a maze using randomized Prim's algorithm (perfect maze)",
+      kruskal: "Generate a maze using randomized Kruskal's algorithm (perfect maze)"
     },
     speed: {
       fast: "Run the animation at high speed",
@@ -141,6 +144,30 @@ const Toolbar: React.FC<ToolbarProps> = ({
             onMouseLeave={handleHideToolTip}
           >
             Recursive Division
+          </button>
+          <button 
+            className="block px-4 py-2 hover:bg-gray-500 w-full text-left transition-colors"
+            onClick={() => generateMaze('dfs')}
+            onMouseEnter={(e) => handleShowToolTip(tooltips.mazes.dfs, e)}
+            onMouseLeave={handleHideToolTip}
+          >
+            DFS Recursive Backtracker
+          </button>
+          <button 
+            className="block px-4 py-2 hover:bg-gray-500 w-full text-left transition-colors"
+            onClick={() => generateMaze('prims')}
+            onMouseEnter={(e) => handleShowToolTip(tooltips.mazes.prims, e)}
+            onMouseLeave={handleHideToolTip}
+          >
+            Prim's Algorithm
+          </button>
+          <button 
+            className="block px-4 py-2 hover:bg-gray-500 w-full text-left transition-colors"
+            onClick={() => generateMaze('kruskal')}
+            onMouseEnter={(e) => handleShowToolTip(tooltips.mazes.kruskal, e)}
+            onMouseLeave={handleHideToolTip}
+          >
+            Kruskal's Algorithm
           </button>
         </div>
       </div>
