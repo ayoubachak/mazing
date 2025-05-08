@@ -324,9 +324,11 @@ export default function MazeVisualizer() {
           }
         } catch { return; }
         if (animateUpdates) {
-          animateShortestPath(result.nodesInShortestPathOrder);
+          // animate full search and path
+          animateAlgorithm(result.visitedNodesInOrder, result.nodesInShortestPathOrder);
         } else {
-          directDrawShortestPath();
+          // instant draw of visited and path
+          directDrawVisitedAndPath();
         }
       }, 200) as unknown as number;
     }
@@ -672,6 +674,41 @@ export default function MazeVisualizer() {
       }
     } catch { return; }
     // highlight shortest path immediately
+    result.nodesInShortestPathOrder.forEach(node => {
+      const el = document.getElementById(`node-${node.row}-${node.col}`);
+      if (el) el.classList.add('node-shortest-path');
+    });
+  };
+
+  /**
+   * Draw visited nodes and shortest path immediately (no animations)
+   */
+  const directDrawVisitedAndPath = () => {
+    // clear previous classes
+    document.querySelectorAll('.node-visited, .node-shortest-path').forEach(el => {
+      el.classList.remove('node-visited', 'node-shortest-path');
+      (el as HTMLElement).style.backgroundColor = '';
+    });
+    // compute result
+    const startNodeObj = grid[startNode.row][startNode.col];
+    const finishNodeObj = grid[finishNode.row][finishNode.col];
+    let result;
+    try {
+      switch (algorithm) {
+        case 'astar': result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        case 'bfs': result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        case 'dfs': result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        default: result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+      }
+    } catch {
+      return;
+    }
+    // color visited
+    result.visitedNodesInOrder.forEach(node => {
+      const el = document.getElementById(`node-${node.row}-${node.col}`);
+      if (el) el.classList.add('node-visited');
+    });
+    // color shortest path
     result.nodesInShortestPathOrder.forEach(node => {
       const el = document.getElementById(`node-${node.row}-${node.col}`);
       if (el) el.classList.add('node-shortest-path');
