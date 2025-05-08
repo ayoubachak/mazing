@@ -53,10 +53,10 @@ export default function MazeVisualizer() {
     clearPath: clearPathOperation
   } = useGridOperations(rows, cols, startNode, finishNode, foodNodes);
 
-  // Initialize the grid
+  // Initialize the grid once on mount
   useEffect(() => {
     initializeGrid();
-  }, [initializeGrid]);
+  }, []);  // run only once to avoid resetting after maze generation
 
   // Handle tooltips
   const handleHideTooltip = useCallback(() => {
@@ -651,8 +651,9 @@ export default function MazeVisualizer() {
   // Maze generation functions
   const handleGenerateMaze = (type: string) => {
     if (isRunning) return;
-    
-    clearBoard();
+    // Reset food nodes before generating maze
+    setFoodNodes([]);
+    setCurrentMaze(type);
     
     if (type === 'random') {
       const newGrid = generateRandomMaze([...grid], startNode, finishNode);
@@ -667,11 +668,10 @@ export default function MazeVisualizer() {
   const renderGrid = () => {
     return (
       <div 
-        className="grid-container overflow-auto bg-gray-100"
+        className="grid-container flex-1 overflow-auto bg-gray-100"
         style={{
           cursor: isGrabbing ? 'grabbing' : 'default',
           position: 'relative',
-          height: 'calc(100vh - 150px)',
           width: '100%',
           overflow: 'auto'
         }}
@@ -721,7 +721,7 @@ export default function MazeVisualizer() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 font-sans">
+    <div className="h-screen flex flex-col bg-gray-50 font-sans overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4 flex justify-between items-center shadow-md">
         <div className="flex items-center">
@@ -792,7 +792,9 @@ export default function MazeVisualizer() {
       )}
       
       {/* Grid */}
-      {renderGrid()}
+      <div className="flex-1 flex flex-col">
+        {renderGrid()}
+      </div>
     </div>
   );
 }

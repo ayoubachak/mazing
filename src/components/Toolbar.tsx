@@ -75,7 +75,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
             algorithm === "bfs" ? "BFS" : "DFS"}</span>
           <ChevronDown size={16} />
         </button>
-        <div className="absolute hidden group-hover:block bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-64">
+        <div className="absolute invisible group-hover:visible group-focus-within:visible bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-64">
           <button 
             className={`block px-4 py-2 hover:bg-gray-500 w-full text-left flex justify-between items-center transition-colors ${algorithm === 'dijkstra' ? 'bg-gray-500' : ''}`}
             onClick={() => setAlgorithm('dijkstra')}
@@ -125,7 +125,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <span className="mr-2 font-medium">Mazes</span>
           <ChevronDown size={16} />
         </button>
-        <div className="absolute hidden group-hover:block bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-52">
+        <div className="absolute invisible group-hover:visible group-focus-within:visible bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-52">
           <button 
             className="block px-4 py-2 hover:bg-gray-500 w-full text-left transition-colors"
             onClick={() => generateMaze('random')}
@@ -159,7 +159,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           }</span>
           <ChevronDown size={16} />
         </button>
-        <div className="absolute hidden group-hover:block bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-52">
+        <div className="absolute invisible group-hover:visible group-focus-within:visible bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-52">
           <button 
             className={`block px-4 py-2 hover:bg-gray-500 w-full text-left flex items-center transition-colors ${currentTool === 'wall' ? 'bg-gray-500' : ''}`}
             onClick={() => setCurrentTool('wall')}
@@ -209,7 +209,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <span className="mr-2 font-medium">Speed: {speed.charAt(0).toUpperCase() + speed.slice(1)}</span>
           <ChevronDown size={16} />
         </button>
-        <div className="absolute hidden group-hover:block bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-44">
+        <div className="absolute invisible group-hover:visible group-focus-within:visible bg-gray-600 mt-1 py-1 rounded-md shadow-lg z-10 w-44">
           <button 
             className={`block px-4 py-2 hover:bg-gray-500 w-full text-left flex justify-between items-center transition-colors ${speed === 'fast' ? 'bg-gray-500' : ''}`}
             onClick={() => setSpeed('fast')}
@@ -272,4 +272,4 @@ const Toolbar: React.FC<ToolbarProps> = ({
   );
 };
 
-export default Toolbar; 
+export default Toolbar;
