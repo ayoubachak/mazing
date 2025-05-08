@@ -781,7 +781,7 @@ export default function MazeVisualizer() {
             display: 'grid',
             gridTemplateRows: `repeat(${rows}, 1.5rem)`,
             gridTemplateColumns: `repeat(${cols}, 1.5rem)`,
-            gap: '1px',
+            gap: '0px',
             transform: `translate(${viewportPosition.x}px, ${viewportPosition.y}px) scale(${zoomLevel})`,
             transition: isGrabbing ? 'none' : 'transform 0.05s ease',
             transformOrigin: 'center',
