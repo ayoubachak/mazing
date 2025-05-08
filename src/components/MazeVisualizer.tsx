@@ -173,14 +173,10 @@ export default function MazeVisualizer() {
     
     for (let i = 0; i < nodesInShortestPathOrder.length; i++) {
       setTimeout(() => {
-        if (!isRunning) {
-          console.log('Animation stopped, isRunning is false');
-          return;
-        }
-        
+        // removed isRunning check to always allow animation in animateUpdates
         const node = nodesInShortestPathOrder[i];
         const { row, col } = node;
-        console.log(`Updating shortest path node at [${row},${col}], i=${i} of ${nodesInShortestPathOrder.length-1}`);
+        console.log(`VisualizationEngine: Adding shortest path class to node-${row}-${col}`);
         
         setGrid(prevGrid => {
           const newGrid = [...prevGrid];
@@ -191,18 +187,14 @@ export default function MazeVisualizer() {
           newGrid[row][col] = updatedNode;
           return newGrid;
         });
-        
-        // Direct DOM manipulation to force style change
+
         forceStyleUpdateOnNode(row, col, false, true);
-        
-        // Force a re-render
         forceUpdate();
-        
-        // Check DOM after state update
         checkDOMForAnimationClasses(row, col);
-        
+
         if (i === nodesInShortestPathOrder.length - 1) {
-          console.log('Animation complete, setting isRunning to false');
+          console.log('VisualizationEngine: Finished animating shortest path');
+          // Complete animation state
           setIsRunning(false);
         }
       }, speedFactor * i);
@@ -222,42 +214,26 @@ export default function MazeVisualizer() {
       if (i === visitedNodesInOrder.length) {
         console.log('Visited nodes animation complete, starting shortest path animation');
         setTimeout(() => {
-          if (isRunning) {
-            animateShortestPath(nodesInShortestPathOrder);
-          } else {
-            console.log('Not calling animateShortestPath because isRunning is false');
-          }
+          // always animate shortest path when animateUpdates is true
+          animateShortestPath(nodesInShortestPathOrder);
         }, speedFactor * i);
         return;
       }
       
       setTimeout(() => {
-        if (!isRunning) {
-          console.log('Animation stopped, isRunning is false');
-          return;
-        }
-        
         const node = visitedNodesInOrder[i];
         const { row, col } = node;
-        console.log(`Updating visited node at [${row},${col}], i=${i} of ${visitedNodesInOrder.length-1}`);
+        console.log(`Animating visited node at [${row},${col}], i=${i}`);
         
         setGrid(prevGrid => {
           const newGrid = [...prevGrid];
-          const updatedNode = {
-            ...newGrid[row][col],
-            isVisited: true
-          };
+          const updatedNode = { ...newGrid[row][col], isVisited: true };
           newGrid[row][col] = updatedNode;
           return newGrid;
         });
-        
-        // Direct DOM manipulation to force style change
+
         forceStyleUpdateOnNode(row, col, true, false);
-        
-        // Force a re-render
         forceUpdate();
-        
-        // Check DOM after state update
         checkDOMForAnimationClasses(row, col);
       }, speedFactor * i);
     }
@@ -324,6 +300,8 @@ export default function MazeVisualizer() {
           }
         } catch { return; }
         if (animateUpdates) {
+          // Enable running state so animations execute
+          setIsRunning(true);
           // animate full search and path
           animateAlgorithm(result.visitedNodesInOrder, result.nodesInShortestPathOrder);
         } else {
