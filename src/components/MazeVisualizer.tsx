@@ -15,6 +15,8 @@ import useGridOperations from '../hooks/useGridOperations';
 import Tooltip from './Tooltip';
 
 export default function MazeVisualizer() {
+  // track if user has run visualize at least once
+  const [hasVisualized, setHasVisualized] = useState(false);
   // Add a reducer to force re-renders
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
@@ -32,7 +34,6 @@ export default function MazeVisualizer() {
   const [isDraggingFinish, setIsDraggingFinish] = useState(false);
   const [foodNodes, setFoodNodes] = useState<{row: number, col: number}[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(true);
-  const [showInstructions, setShowInstructions] = useState(true);
   const [viewportPosition, setViewportPosition] = useState({ x: 0, y: 0 });
   const [isGrabbing, setIsGrabbing] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
@@ -85,6 +86,8 @@ export default function MazeVisualizer() {
       el.classList.remove('node-visited', 'node-shortest-path');
       (el as HTMLElement).style.backgroundColor = '';
     });
+    // reset visualize state
+    setHasVisualized(false);
   };
 
   const clearWallsAndWeights = () => {
@@ -288,34 +291,30 @@ export default function MazeVisualizer() {
     setIsMousePressed(false);
     setIsDraggingStart(false);
     setIsDraggingFinish(false);
-    // After completing interactions, re-run path based on animateUpdates
-    if (!isRunning) {
-      clearPath();
-      if (liveUpdateTimer.current) window.clearTimeout(liveUpdateTimer.current);
-      liveUpdateTimer.current = window.setTimeout(() => {
-        // compute shortest path nodes
-        const startNodeObj = grid[startNode.row][startNode.col];
-        const finishNodeObj = grid[finishNode.row][finishNode.col];
-        let result;
-        try {
-          switch (algorithm) {
-            case 'astar': result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes); break;
-            case 'bfs': result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
-            case 'dfs': result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
-            default: result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
-          }
-        } catch { return; }
-        if (animateUpdates) {
-          // Enable running state so animations execute
-          setIsRunning(true);
-          // animate full search and path
-          animateAlgorithm(result.visitedNodesInOrder, result.nodesInShortestPathOrder);
-        } else {
-          // instant draw of visited and path
-          directDrawVisitedAndPath();
+    // only update after user has visualized at least once
+    if (!hasVisualized || isRunning) return;
+    clearPath();
+    if (liveUpdateTimer.current) window.clearTimeout(liveUpdateTimer.current);
+    liveUpdateTimer.current = window.setTimeout(() => {
+      // compute shortest path nodes
+      const startNodeObj = grid[startNode.row][startNode.col];
+      const finishNodeObj = grid[finishNode.row][finishNode.col];
+      let result;
+      try {
+        switch (algorithm) {
+          case 'astar': result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes); break;
+          case 'bfs': result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+          case 'dfs': result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+          default: result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
         }
-      }, 200) as unknown as number;
-    }
+      } catch { return; }
+      if (animateUpdates) {
+        setIsRunning(true);
+        animateAlgorithm(result.visitedNodesInOrder, result.nodesInShortestPathOrder);
+      } else {
+        directDrawVisitedAndPath();
+      }
+    }, 200) as unknown as number;
   };
 
   // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/max-switch-case, sonarjs/no-identical-expressions
@@ -563,6 +562,8 @@ export default function MazeVisualizer() {
     console.log('Directly visualizing algorithm (bypassing React state)');
     // mark as running to enable live updates
     setIsRunning(true);
+    // record that user has visualized
+    setHasVisualized(true);
 
     // Clear any existing visualization first
     document.querySelectorAll('.node-visited, .node-shortest-path').forEach(el => {
@@ -869,31 +870,6 @@ export default function MazeVisualizer() {
       
       {/* Legend */}
       <Legend />
-      
-      {/* Instructions with close button */}
-      {showInstructions && (
-        <div className="bg-blue-50 p-3 text-sm flex items-start gap-2 border-b relative">
-          <AlertTriangle size={18} className="text-blue-700 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold mb-1">How to use:</p>
-            <ul className="list-disc pl-5 space-y-1">
-              <li><strong>Drag start/target nodes</strong> to reposition</li>
-              <li><strong>Click and drag</strong> to add/remove walls, weights, or food</li>
-              <li><strong>Alt+Click or middle mouse button</strong> to pan the grid</li>
-              <li><strong>Mouse wheel</strong> to zoom in/out</li>
-              <li><strong>Food nodes</strong> act as waypoints - the algorithm will visit them before the target</li>
-              <li><strong>Weight nodes</strong> slow down the algorithm (higher cost to traverse)</li>
-            </ul>
-          </div>
-          <button 
-            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 transition-colors"
-            onClick={() => setShowInstructions(false)}
-            aria-label="Close instructions"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
       
       {/* Grid */}
       <div className="flex-1 flex flex-col">
