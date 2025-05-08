@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 100vw;
+  min-height: 100vh;
+}
+
+.grid-container {
+  overflow: auto;
+}
+
+.node {
+  transition: background-color 0.2s;
+}
+
+/* Animation for visited nodes */
+.node-visited {
+  animation: visitedAnimation 0.5s ease-out forwards !important;
+}
+
+/* Animation for shortest path nodes */
+.node-shortest-path {
+  animation: shortestPathAnimation 0.5s ease-out forwards !important;
+}
+
+/* Animation keyframes for visited nodes */
+@keyframes visitedAnimation {
+  0% {
+    transform: scale(0.3);
+    background-color: rgba(0, 217, 159, 0.75);
+    border-radius: 100%;
+  }
+  50% {
+    background-color: rgba(0, 190, 218, 0.75);
+  }
+  75% {
+    transform: scale(1.2);
+    background-color: rgba(0, 158, 255, 0.75);
+  }
+  100% {
+    transform: scale(1);
+    background-color: rgba(0, 158, 255, 0.8);
+  }
+}
+
+/* Animation keyframes for shortest path nodes */
+@keyframes shortestPathAnimation {
+  0% {
+    transform: scale(0.6);
+    background-color: rgba(255, 254, 106, 1);
+  }
+  50% {
+    transform: scale(1.2);
+    background-color: rgba(255, 230, 55, 1);
+  }
+  100% {
+    transform: scale(1);
+    background-color: rgba(255, 207, 0, 1);
+  }
+}
+
+/* Dropdown menu styles */
+.dropdown-content {
+  min-width: 160px;
+}
+
+/* Prevent selection of text during drag operations */
+.node, .grid-container, .grid-content {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}

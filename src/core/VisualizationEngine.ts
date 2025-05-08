@@ -1,0 +1,318 @@
+import type { GridNode } from './GridModel';
+import { eventBus, EVENTS } from './EventBus';
+
+/**
+ * Speed presets for animations
+ */
+export enum AnimationSpeed {
+  SLOW = 'slow',
+  MEDIUM = 'medium',
+  FAST = 'fast'
+}
+
+/**
+ * Visualization states
+ */
+export enum VisualizationState {
+  IDLE = 'idle',
+  RUNNING = 'running',
+  PAUSED = 'paused',
+  COMPLETED = 'completed'
+}
+
+/**
+ * Visualization options
+ */
+export interface VisualizationOptions {
+  /** Animation speed */
+  speed: AnimationSpeed;
+  /** Whether to show step-by-step annotations */
+  showAnnotations?: boolean;
+  /** Custom CSS class for visited nodes */
+  visitedClassName?: string;
+  /** Custom CSS class for shortest path nodes */
+  shortestPathClassName?: string;
+}
+
+/**
+ * VisualizationEngine - Handles animation and DOM manipulation
+ * 
+ * This class is responsible for animating algorithm results and
+ * directly manipulating the DOM for efficient visualization.
+ */
+export class VisualizationEngine {
+  private visitedNodesInOrder: GridNode[] = [];
+  private shortestPathNodesInOrder: GridNode[] = [];
+  private animationState: VisualizationState = VisualizationState.IDLE;
+  private visitedTimeouts: number[] = [];
+  private shortestPathTimeouts: number[] = [];
+  private currentVisitedIndex: number = 0;
+  private currentShortestPathIndex: number = 0;
+  private options: VisualizationOptions;
+  
+  constructor(options: Partial<VisualizationOptions> = {}) {
+    this.options = {
+      speed: options.speed || AnimationSpeed.MEDIUM,
+      showAnnotations: options.showAnnotations || false,
+      visitedClassName: options.visitedClassName || 'node-visited',
+      shortestPathClassName: options.shortestPathClassName || 'node-shortest-path'
+    };
+    
+    // Subscribe to speed change events
+    eventBus.subscribe(EVENTS.ANIMATION_SPEED_CHANGED, (data) => {
+      this.options.speed = data.speed;
+    });
+  }
+  
+  /**
+   * Set the algorithm results to visualize
+   */
+  setAlgorithmResults(visitedNodes: GridNode[], shortestPathNodes: GridNode[]): void {
+    this.reset();
+    this.visitedNodesInOrder = [...visitedNodes];
+    this.shortestPathNodesInOrder = [...shortestPathNodes];
+  }
+  
+  /**
+   * Start or resume the visualization
+   */
+  start(): void {
+    if (this.animationState === VisualizationState.RUNNING) {
+      return;
+    }
+    
+    this.animationState = VisualizationState.RUNNING;
+    eventBus.publish(EVENTS.VISUALIZATION_STARTED);
+    
+    if (this.currentVisitedIndex < this.visitedNodesInOrder.length) {
+      this.animateVisitedNodes();
+    } else if (this.currentShortestPathIndex < this.shortestPathNodesInOrder.length) {
+      this.animateShortestPath();
+    } else {
+      this.complete();
+    }
+  }
+  
+  /**
+   * Pause the visualization
+   */
+  pause(): void {
+    if (this.animationState !== VisualizationState.RUNNING) {
+      return;
+    }
+    
+    this.animationState = VisualizationState.PAUSED;
+    eventBus.publish(EVENTS.VISUALIZATION_STOPPED, { 
+      state: this.animationState,
+      visitedProgress: this.currentVisitedIndex,
+      shortestPathProgress: this.currentShortestPathIndex
+    });
+    
+    // Clear all active timeouts
+    this.clearTimeouts();
+  }
+  
+  /**
+   * Stop the visualization and clear all visualizations
+   */
+  stop(): void {
+    this.clearTimeouts();
+    this.clearVisualization();
+    this.reset();
+    
+    eventBus.publish(EVENTS.VISUALIZATION_STOPPED, { 
+      state: VisualizationState.IDLE
+    });
+  }
+  
+  /**
+   * Reset the visualization to the beginning
+   */
+  reset(): void {
+    this.clearTimeouts();
+    this.currentVisitedIndex = 0;
+    this.currentShortestPathIndex = 0;
+    this.animationState = VisualizationState.IDLE;
+  }
+  
+  /**
+   * Clear visualization by removing all visual effects
+   */
+  clearVisualization(): void {
+    document.querySelectorAll(`.${this.options.visitedClassName}, .${this.options.shortestPathClassName}`)
+      .forEach(element => {
+        element.classList.remove(
+          this.options.visitedClassName!, 
+          this.options.shortestPathClassName!
+        );
+      });
+  }
+  
+  /**
+   * Get the current speed in milliseconds
+   */
+  private getSpeedFactor(): number {
+    switch (this.options.speed) {
+      case AnimationSpeed.SLOW:
+        return 100;
+      case AnimationSpeed.MEDIUM:
+        return 50;
+      case AnimationSpeed.FAST:
+        return 10;
+      default:
+        return 50;
+    }
+  }
+  
+  /**
+   * Get node element by its row and column
+   */
+  private getNodeElement(row: number, col: number): HTMLElement | null {
+    return document.getElementById(`node-${row}-${col}`);
+  }
+  
+  /**
+   * Animate visited nodes
+   */
+  private animateVisitedNodes(): void {
+    if (this.animationState !== VisualizationState.RUNNING) {
+      return;
+    }
+    
+    const speedFactor = this.getSpeedFactor();
+    
+    for (let i = this.currentVisitedIndex; i < this.visitedNodesInOrder.length; i++) {
+      const timeout = window.setTimeout(() => {
+        if (this.animationState !== VisualizationState.RUNNING) {
+          return;
+        }
+        
+        const node = this.visitedNodesInOrder[i];
+        const element = this.getNodeElement(node.row, node.col);
+        
+        if (element) {
+          element.classList.add(this.options.visitedClassName!);
+          
+          eventBus.publish(EVENTS.VISUALIZATION_STEP, {
+            type: 'visited',
+            node,
+            index: i,
+            total: this.visitedNodesInOrder.length
+          });
+        }
+        
+        this.currentVisitedIndex = i + 1;
+        
+        // If this was the last node, start animating the shortest path
+        if (i === this.visitedNodesInOrder.length - 1) {
+          // Add a slight delay before starting shortest path animation
+          window.setTimeout(() => {
+            this.animateShortestPath();
+          }, speedFactor * 2);
+        }
+      }, speedFactor * (i - this.currentVisitedIndex));
+      
+      this.visitedTimeouts.push(timeout);
+    }
+  }
+  
+  /**
+   * Animate shortest path
+   */
+  private animateShortestPath(): void {
+    if (this.animationState !== VisualizationState.RUNNING) {
+      return;
+    }
+    
+    // If there's no shortest path, complete the visualization
+    if (this.shortestPathNodesInOrder.length === 0) {
+      this.complete();
+      return;
+    }
+    
+    const speedFactor = this.getSpeedFactor() * 2; // Slower for better visibility
+    
+    for (let i = this.currentShortestPathIndex; i < this.shortestPathNodesInOrder.length; i++) {
+      const timeout = window.setTimeout(() => {
+        if (this.animationState !== VisualizationState.RUNNING) {
+          return;
+        }
+        
+        const node = this.shortestPathNodesInOrder[i];
+        const element = this.getNodeElement(node.row, node.col);
+        
+        if (element) {
+          element.classList.add(this.options.shortestPathClassName!);
+          
+          eventBus.publish(EVENTS.VISUALIZATION_STEP, {
+            type: 'shortest',
+            node,
+            index: i,
+            total: this.shortestPathNodesInOrder.length
+          });
+        }
+        
+        this.currentShortestPathIndex = i + 1;
+        
+        // If this was the last node, complete the visualization
+        if (i === this.shortestPathNodesInOrder.length - 1) {
+          this.complete();
+        }
+      }, speedFactor * (i - this.currentShortestPathIndex));
+      
+      this.shortestPathTimeouts.push(timeout);
+    }
+  }
+  
+  /**
+   * Complete the visualization
+   */
+  private complete(): void {
+    this.animationState = VisualizationState.COMPLETED;
+    eventBus.publish(EVENTS.VISUALIZATION_COMPLETED, {
+      visitedNodesCount: this.visitedNodesInOrder.length,
+      shortestPathNodesCount: this.shortestPathNodesInOrder.length
+    });
+  }
+  
+  /**
+   * Clear all animation timeouts
+   */
+  private clearTimeouts(): void {
+    this.visitedTimeouts.forEach(timeout => window.clearTimeout(timeout));
+    this.shortestPathTimeouts.forEach(timeout => window.clearTimeout(timeout));
+    this.visitedTimeouts = [];
+    this.shortestPathTimeouts = [];
+  }
+  
+  /**
+   * Get current visualization state
+   */
+  getState(): VisualizationState {
+    return this.animationState;
+  }
+  
+  /**
+   * Get current visualization progress
+   */
+  getProgress(): { 
+    visitedProgress: number,
+    visitedTotal: number,
+    shortestPathProgress: number, 
+    shortestPathTotal: number 
+  } {
+    return {
+      visitedProgress: this.currentVisitedIndex,
+      visitedTotal: this.visitedNodesInOrder.length,
+      shortestPathProgress: this.currentShortestPathIndex,
+      shortestPathTotal: this.shortestPathNodesInOrder.length
+    };
+  }
+  
+  /**
+   * Set animation speed
+   */
+  setSpeed(speed: AnimationSpeed): void {
+    this.options.speed = speed;
+  }
+} 

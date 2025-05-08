@@ -1,0 +1,812 @@
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import { 
+  ChevronDown, Zap, Play, Pause, RefreshCw, Grid, Map, 
+  Edit, Square, Target, Circle, ArrowRight, Hash, Weight, 
+  Menu, X, Home, AlertTriangle, Info 
+} from 'lucide-react';
+import type { GridNode } from './types';
+import { 
+  runDijkstra, 
+  runAStar, 
+  runBFS, 
+  runDFS 
+} from '../algorithms/pathfinding';
+import { generateRandomMaze, generateRecursiveDivisionMaze } from '../algorithms/mazeGeneration';
+import NodeComponent from './NodeComponent';
+import Toolbar from './Toolbar';
+import Legend from './Legend';
+import useGridOperations from '../hooks/useGridOperations';
+import Tooltip from './Tooltip';
+
+export default function MazeVisualizer() {
+  // Add a reducer to force re-renders
+  const [, forceUpdate] = useReducer(x => x + 1, 0);
+
+  // Grid Configuration
+  const [rows, setRows] = useState(25);
+  const [cols, setCols] = useState(40);
+  const [isMousePressed, setIsMousePressed] = useState(false);
+  const [currentTool, setCurrentTool] = useState('wall');
+  const [startNode, setStartNode] = useState({ row: 10, col: 10 });
+  const [finishNode, setFinishNode] = useState({ row: 10, col: 30 });
+  const [isRunning, setIsRunning] = useState(false);
+  const [algorithm, setAlgorithm] = useState('dijkstra');
+  const [speed, setSpeed] = useState('fast');
+  const [isDraggingStart, setIsDraggingStart] = useState(false);
+  const [isDraggingFinish, setIsDraggingFinish] = useState(false);
+  const [foodNodes, setFoodNodes] = useState<{row: number, col: number}[]>([]);
+  const [currentMaze, setCurrentMaze] = useState('none');
+  const [isMenuOpen, setIsMenuOpen] = useState(true);
+  const [showInstructions, setShowInstructions] = useState(true);
+  const [viewportPosition, setViewportPosition] = useState({ x: 0, y: 0 });
+  const [isGrabbing, setIsGrabbing] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipContent, setTooltipContent] = useState('');
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Use custom hook for grid operations
+  const {
+    grid,
+    setGrid,
+    initializeGrid,
+    createNode,
+    updateNodeInGrid,
+    clearBoard: clearBoardOperation,
+    clearWallsAndWeights: clearWallsAndWeightsOperation,
+    clearPath: clearPathOperation
+  } = useGridOperations(rows, cols, startNode, finishNode, foodNodes);
+
+  // Initialize the grid
+  useEffect(() => {
+    initializeGrid();
+  }, [initializeGrid]);
+
+  // Handle tooltips
+  const handleHideTooltip = useCallback(() => {
+    setShowTooltip(false);
+  }, []);
+
+  const handleShowTooltip = (content: string, event: React.MouseEvent) => {
+    // Don't show tooltips if already running an algorithm
+    if (isRunning) return;
+    
+    setTooltipContent(content);
+    setTooltipPosition({ x: event.clientX, y: event.clientY });
+    setShowTooltip(true);
+  };
+
+  // Board management functions
+  const clearBoard = () => {
+    setFoodNodes([]);
+    clearBoardOperation();
+  };
+
+  const clearWallsAndWeights = () => {
+    clearWallsAndWeightsOperation();
+  };
+
+  const clearPath = () => {
+    clearPathOperation();
+  };
+
+  // Add a function to inspect DOM elements during animation
+  const checkDOMForAnimationClasses = (row: number, col: number) => {
+    // Safety check for valid row/col
+    if (row < 0 || col < 0 || row >= rows || col >= cols) {
+      console.warn(`Invalid node coordinates [${row},${col}] - outside grid bounds`);
+      return;
+    }
+    
+    setTimeout(() => {
+      try {
+        const nodeElement = document.getElementById(`node-${row}-${col}`);
+        if (nodeElement) {
+          console.log('DOM Node element at', [row, col], ':', {
+            element: nodeElement,
+            className: nodeElement.className,
+            hasVisitedClass: nodeElement.className.includes('node-visited'),
+            hasShortestPathClass: nodeElement.className.includes('node-shortest-path'),
+            computedStyle: window.getComputedStyle(nodeElement),
+            backgroundColor: window.getComputedStyle(nodeElement).backgroundColor
+          });
+        } else {
+          console.warn(`DOM element for node-${row}-${col} not found`);
+        }
+      } catch (error) {
+        console.error('Error inspecting DOM element:', error);
+      }
+    }, 10);
+  };
+
+  // Add a function to directly manipulate DOM to test if element manipulation works
+  const forceStyleUpdateOnNode = (row: number, col: number, isVisited: boolean, isShortest: boolean) => {
+    // Safety check for valid row/col
+    if (row < 0 || col < 0 || row >= rows || col >= cols) {
+      console.warn(`Invalid node coordinates [${row},${col}] - outside grid bounds`);
+      return;
+    }
+    
+    setTimeout(() => {
+      try {
+        const nodeElement = document.getElementById(`node-${row}-${col}`);
+        if (nodeElement) {
+          console.log('Directly updating DOM element style at', [row, col]);
+          
+          // Force direct style application
+          if (isVisited) {
+            nodeElement.classList.add('node-visited');
+            nodeElement.style.backgroundColor = 'rgba(0, 158, 255, 0.8)';
+          }
+          
+          if (isShortest) {
+            nodeElement.classList.add('node-shortest-path');
+            nodeElement.style.backgroundColor = 'rgba(255, 207, 0, 1)';
+          }
+        } else {
+          console.warn(`DOM element for node-${row}-${col} not found, cannot apply styles`);
+        }
+      } catch (error) {
+        console.error('Error updating DOM element style:', error);
+      }
+    }, 20); // Slight delay to ensure React has updated the DOM
+  };
+
+  // Animation functions with direct DOM manipulation for testing
+  const animateShortestPath = (nodesInShortestPathOrder: GridNode[]) => {
+    console.log('animateShortestPath called with', nodesInShortestPathOrder.length, 'nodes');
+    const speedFactor = speed === 'fast' ? 20 : speed === 'medium' ? 40 : 80;
+    
+    for (let i = 0; i < nodesInShortestPathOrder.length; i++) {
+      setTimeout(() => {
+        if (!isRunning) {
+          console.log('Animation stopped, isRunning is false');
+          return;
+        }
+        
+        const node = nodesInShortestPathOrder[i];
+        const { row, col } = node;
+        console.log(`Updating shortest path node at [${row},${col}], i=${i} of ${nodesInShortestPathOrder.length-1}`);
+        
+        setGrid(prevGrid => {
+          const newGrid = [...prevGrid];
+          const updatedNode = {
+            ...newGrid[row][col],
+            isShortest: true
+          };
+          newGrid[row][col] = updatedNode;
+          return newGrid;
+        });
+        
+        // Direct DOM manipulation to force style change
+        forceStyleUpdateOnNode(row, col, false, true);
+        
+        // Force a re-render
+        forceUpdate();
+        
+        // Check DOM after state update
+        checkDOMForAnimationClasses(row, col);
+        
+        if (i === nodesInShortestPathOrder.length - 1) {
+          console.log('Animation complete, setting isRunning to false');
+          setIsRunning(false);
+        }
+      }, speedFactor * i);
+    }
+  };
+
+  const animateAlgorithm = (visitedNodesInOrder: GridNode[], nodesInShortestPathOrder: GridNode[]) => {
+    console.log('animateAlgorithm called with', visitedNodesInOrder.length, 'visited nodes and', 
+                nodesInShortestPathOrder.length, 'path nodes');
+    const speedFactor = speed === 'fast' ? 10 : speed === 'medium' ? 25 : 50;
+    
+    for (let i = 0; i <= visitedNodesInOrder.length; i++) {
+      if (i === visitedNodesInOrder.length) {
+        console.log('Visited nodes animation complete, starting shortest path animation');
+        setTimeout(() => {
+          if (isRunning) {
+            animateShortestPath(nodesInShortestPathOrder);
+          } else {
+            console.log('Not calling animateShortestPath because isRunning is false');
+          }
+        }, speedFactor * i);
+        return;
+      }
+      
+      setTimeout(() => {
+        if (!isRunning) {
+          console.log('Animation stopped, isRunning is false');
+          return;
+        }
+        
+        const node = visitedNodesInOrder[i];
+        const { row, col } = node;
+        console.log(`Updating visited node at [${row},${col}], i=${i} of ${visitedNodesInOrder.length-1}`);
+        
+        setGrid(prevGrid => {
+          const newGrid = [...prevGrid];
+          const updatedNode = {
+            ...newGrid[row][col],
+            isVisited: true
+          };
+          newGrid[row][col] = updatedNode;
+          return newGrid;
+        });
+        
+        // Direct DOM manipulation to force style change
+        forceStyleUpdateOnNode(row, col, true, false);
+        
+        // Force a re-render
+        forceUpdate();
+        
+        // Check DOM after state update
+        checkDOMForAnimationClasses(row, col);
+      }, speedFactor * i);
+    }
+  };
+
+  // Handle mouse events
+  const handleMouseDown = (row: number, col: number, event: React.MouseEvent) => {
+    // Only respond to left clicks (button === 0)
+    if (event.button !== 0) return;
+    
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    const node = grid[row][col];
+    
+    if (node.isStart) {
+      setIsDraggingStart(true);
+      return;
+    }
+    
+    if (node.isFinish) {
+      setIsDraggingFinish(true);
+      return;
+    }
+    
+    setIsMousePressed(true);
+    updateNodeStatus(row, col);
+  };
+
+  const handleMouseEnter = (row: number, col: number) => {
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    if (!isRunning && isMousePressed) {
+      updateNodeStatus(row, col);
+    }
+    
+    if (isDraggingStart) {
+      moveStartNode(row, col);
+    }
+    
+    if (isDraggingFinish) {
+      moveFinishNode(row, col);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsMousePressed(false);
+    setIsDraggingStart(false);
+    setIsDraggingFinish(false);
+  };
+
+  // Update node status based on the currently selected tool
+  const updateNodeStatus = (row: number, col: number) => {
+    if (
+      (row === startNode.row && col === startNode.col) ||
+      (row === finishNode.row && col === finishNode.col)
+    ) {
+      return;
+    }
+    
+    const node = grid[row][col];
+    const newNode = { ...node };
+    
+    // Toggle behavior for walls and weights
+    if (currentTool === 'wall') {
+      newNode.isWall = !node.isWall;
+      if (newNode.isWall) {
+        // If we're making this a wall, remove any food or weight
+        newNode.isFood = false;
+        newNode.isWeight = false;
+        newNode.weightValue = 1;
+        if (node.isFood) {
+          setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
+        }
+      }
+    } 
+    else if (currentTool === 'food') {
+      // Food can't be placed on walls or weights
+      if (node.isWall || node.isWeight) return;
+      
+      const isAlreadyFood = foodNodes.some(food => food.row === row && food.col === col);
+      
+      if (!isAlreadyFood) {
+        newNode.isFood = true;
+        setFoodNodes(prev => [...prev, { row, col }]);
+      } else {
+        newNode.isFood = false;
+        setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
+      }
+    } 
+    else if (currentTool === 'weight') {
+      // Weights can't be placed on walls or food
+      if (node.isWall || node.isFood) return;
+      
+      newNode.isWeight = !node.isWeight;
+      newNode.weightValue = newNode.isWeight ? 5 : 1;
+    } 
+    else if (currentTool === 'eraser') {
+      newNode.isWall = false;
+      newNode.isWeight = false;
+      newNode.weightValue = 1;
+      
+      if (node.isFood) {
+        newNode.isFood = false;
+        setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
+      }
+    }
+    
+    updateNodeInGrid(row, col, newNode);
+  };
+
+  // Move start and finish nodes
+  const moveStartNode = (row: number, col: number) => {
+    if (row === finishNode.row && col === finishNode.col) return;
+    if (grid[row][col].isWall) return;
+    
+    // Don't create duplicates - remove the old start node first
+    const newGrid = grid.map(gridRow => 
+      gridRow.map(node => {
+        if (node.isStart) {
+          return {
+            ...node,
+            isStart: false
+          };
+        }
+        return node;
+      })
+    );
+    
+    // Update the grid with the new start position
+    newGrid[row][col] = {
+      ...newGrid[row][col],
+      isStart: true,
+      isWall: false,
+      isWeight: false,
+      isFood: false
+    };
+    
+    // If this was a food node, remove it from foodNodes
+    if (grid[row][col].isFood) {
+      setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
+    }
+    
+    setStartNode({ row, col });
+    initializeGrid(newGrid);
+  };
+
+  const moveFinishNode = (row: number, col: number) => {
+    if (row === startNode.row && col === startNode.col) return;
+    if (grid[row][col].isWall) return;
+    
+    // Don't create duplicates - remove the old finish node first
+    const newGrid = grid.map(gridRow => 
+      gridRow.map(node => {
+        if (node.isFinish) {
+          return {
+            ...node,
+            isFinish: false
+          };
+        }
+        return node;
+      })
+    );
+    
+    // Update the grid with the new finish position
+    newGrid[row][col] = {
+      ...newGrid[row][col],
+      isFinish: true,
+      isWall: false,
+      isWeight: false,
+      isFood: false
+    };
+    
+    // If this was a food node, remove it from foodNodes
+    if (grid[row][col].isFood) {
+      setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
+    }
+    
+    setFinishNode({ row, col });
+    initializeGrid(newGrid);
+  };
+
+  // Add a function to inspect the grid state for debugging
+  const debugGridState = useCallback(() => {
+    if (!grid || grid.length === 0) {
+      console.log('Grid is empty or undefined');
+      return;
+    }
+    
+    let visitedCount = 0;
+    let shortestCount = 0;
+    
+    grid.forEach(row => {
+      row.forEach(node => {
+        if (node.isVisited) visitedCount++;
+        if (node.isShortest) shortestCount++;
+      });
+    });
+    
+    console.log('Grid state check:', {
+      gridSize: `${rows}x${cols}`,
+      totalNodes: rows * cols,
+      visitedNodes: visitedCount,
+      shortestPathNodes: shortestCount,
+      startNode,
+      finishNode
+    });
+    
+    // Safely check a specific node for debugging with boundary checks
+    if (startNode && 
+        startNode.row >= 0 && startNode.row < grid.length && 
+        startNode.col + 1 >= 0 && startNode.col + 1 < grid[0].length) {
+      const testNode = grid[startNode.row][startNode.col + 1];
+      console.log('Test node next to start:', testNode);
+    } else {
+      console.log('Cannot access test node - start node or adjacent node is outside grid bounds');
+    }
+  }, [grid, rows, cols, startNode, finishNode]);
+  
+  // Add useEffect to monitor changes to isRunning and grid for debugging
+  useEffect(() => {
+    console.log('isRunning changed to:', isRunning);
+    if (!isRunning && grid && grid.length > 0) {
+      // If animation just finished, check the grid state
+      debugGridState();
+    }
+  }, [isRunning, debugGridState, grid]);
+
+  // Visualization function
+  const visualizeAlgorithm = () => {
+    console.log('visualizeAlgorithm called, isRunning:', isRunning);
+    debugGridState(); // Check initial grid state
+    
+    if (isRunning) {
+      // If we're already running, stop the visualization
+      console.log('Stopping visualization');
+      setIsRunning(false);
+      clearPath();
+      return;
+    }
+    
+    clearPath();
+    setIsRunning(true);
+    console.log('Starting visualization, algorithm:', algorithm);
+    
+    const startNodeObj = grid[startNode.row][startNode.col];
+    const finishNodeObj = grid[finishNode.row][finishNode.col];
+    console.log('Start node:', startNode, 'Finish node:', finishNode);
+    console.log('Food nodes:', foodNodes);
+    
+    let visitedNodesInOrder: GridNode[] = [];
+    let nodesInShortestPathOrder: GridNode[] = [];
+    
+    try {
+      if (algorithm === 'dijkstra') {
+        console.log('Running Dijkstra algorithm');
+        const result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      } else if (algorithm === 'astar') {
+        console.log('Running A* algorithm');
+        const result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      } else if (algorithm === 'bfs') {
+        console.log('Running BFS algorithm');
+        const result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      } else if (algorithm === 'dfs') {
+        console.log('Running DFS algorithm');
+        const result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      }
+      
+      console.log("Starting visualization with:", { 
+        algorithm,
+        visitedNodesCount: visitedNodesInOrder.length,
+        pathCount: nodesInShortestPathOrder.length 
+      });
+      
+      if (visitedNodesInOrder.length === 0) {
+        console.error('No visited nodes returned from algorithm');
+        setIsRunning(false);
+        return;
+      }
+      
+      console.log('Calling animateAlgorithm with', visitedNodesInOrder.length, 'nodes');
+      animateAlgorithm(visitedNodesInOrder, nodesInShortestPathOrder);
+    } catch (error) {
+      console.error('Error visualizing algorithm:', error);
+      setIsRunning(false);
+    }
+  };
+
+  // Add a "direct visualization" button and function that completely bypasses React state
+  const directVisualizeAlgorithm = () => {
+    console.log('Directly visualizing algorithm (bypassing React state)');
+    
+    // Clear any existing visualization first
+    document.querySelectorAll('.node-visited, .node-shortest-path').forEach(el => {
+      el.classList.remove('node-visited', 'node-shortest-path');
+      (el as HTMLElement).style.backgroundColor = '';
+    });
+    
+    const startNodeObj = grid[startNode.row][startNode.col];
+    const finishNodeObj = grid[finishNode.row][finishNode.col];
+    
+    let visitedNodesInOrder: GridNode[] = [];
+    let nodesInShortestPathOrder: GridNode[] = [];
+    
+    try {
+      if (algorithm === 'dijkstra') {
+        const result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      } else if (algorithm === 'astar') {
+        const result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      } else if (algorithm === 'bfs') {
+        const result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      } else if (algorithm === 'dfs') {
+        const result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes);
+        visitedNodesInOrder = result.visitedNodesInOrder;
+        nodesInShortestPathOrder = result.nodesInShortestPathOrder;
+      }
+      
+      console.log("Direct visualization with:", { 
+        algorithm,
+        visitedNodesCount: visitedNodesInOrder.length,
+        pathCount: nodesInShortestPathOrder.length 
+      });
+      
+      // Direct DOM manipulation to visualize the algorithm
+      const speedFactor = speed === 'fast' ? 10 : speed === 'medium' ? 25 : 50;
+      
+      // Animate visited nodes
+      visitedNodesInOrder.forEach((node, index) => {
+        setTimeout(() => {
+          const { row, col } = node;
+          const element = document.getElementById(`node-${row}-${col}`);
+          if (element) {
+            element.classList.add('node-visited');
+          }
+        }, speedFactor * index);
+      });
+      
+      // Animate shortest path after visited nodes
+      setTimeout(() => {
+        const pathSpeedFactor = speed === 'fast' ? 20 : speed === 'medium' ? 40 : 80;
+        
+        nodesInShortestPathOrder.forEach((node, index) => {
+          setTimeout(() => {
+            const { row, col } = node;
+            const element = document.getElementById(`node-${row}-${col}`);
+            if (element) {
+              element.classList.add('node-shortest-path');
+            }
+          }, pathSpeedFactor * index);
+        });
+      }, speedFactor * visitedNodesInOrder.length);
+      
+    } catch (error) {
+      console.error('Error in direct visualization:', error);
+    }
+  };
+
+  // Handle grid viewport navigation
+  const handleGridMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 1 || (e.button === 0 && e.altKey)) { // Middle mouse button or Alt+Left click
+      setIsGrabbing(true);
+      setDragStartPos({ x: e.clientX, y: e.clientY });
+      // Don't call preventDefault() here, as it's not needed for just setting state
+    }
+  };
+
+  const handleGridMouseMove = (e: React.MouseEvent) => {
+    if (isGrabbing) {
+      const dx = e.clientX - dragStartPos.x;
+      const dy = e.clientY - dragStartPos.y;
+      
+      setViewportPosition({
+        x: viewportPosition.x + dx,
+        y: viewportPosition.y + dy
+      });
+      
+      setDragStartPos({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const handleGridMouseUp = () => {
+    if (isGrabbing) {
+      setIsGrabbing(false);
+    }
+  };
+
+  const handleZoom = (e: React.WheelEvent) => {
+    // Don't call preventDefault on wheel events as they're passive by default
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1; // Zoom out or in
+    setZoomLevel(prevZoom => {
+      const newZoom = prevZoom * zoomFactor;
+      // Limit zoom level between 0.5 and 3
+      return Math.max(0.5, Math.min(3, newZoom));
+    });
+  };
+
+  // Maze generation functions
+  const handleGenerateMaze = (type: string) => {
+    if (isRunning) return;
+    
+    clearBoard();
+    setCurrentMaze(type);
+    
+    if (type === 'random') {
+      const newGrid = generateRandomMaze([...grid], startNode, finishNode);
+      initializeGrid(newGrid);
+    } else if (type === 'recursiveDivision') {
+      const newGrid = generateRecursiveDivisionMaze([...grid], startNode, finishNode, rows, cols);
+      initializeGrid(newGrid);
+    }
+  };
+
+  // Render the grid
+  const renderGrid = () => {
+    return (
+      <div 
+        className="grid-container overflow-auto bg-gray-100"
+        style={{
+          cursor: isGrabbing ? 'grabbing' : 'default',
+          position: 'relative',
+          height: 'calc(100vh - 150px)',
+          width: '100%',
+          overflow: 'auto'
+        }}
+        onMouseDown={handleGridMouseDown}
+        onMouseMove={handleGridMouseMove}
+        onMouseUp={handleGridMouseUp}
+        onMouseLeave={handleGridMouseUp}
+        onWheel={handleZoom}
+        ref={gridRef}
+      >
+        <div 
+          className="grid-content"
+          style={{
+            display: 'grid',
+            gridTemplateRows: `repeat(${rows}, 1.5rem)`,
+            gridTemplateColumns: `repeat(${cols}, 1.5rem)`,
+            gap: '1px',
+            transform: `translate(${viewportPosition.x}px, ${viewportPosition.y}px) scale(${zoomLevel})`,
+            transition: isGrabbing ? 'none' : 'transform 0.05s ease',
+            transformOrigin: 'center',
+            padding: '20px',
+            minWidth: '100%',
+            minHeight: '100%'
+          }}
+        >
+          {grid.map((row, rowIdx) => (
+            row.map((node, nodeIdx) => (
+              <NodeComponent
+                key={`${node.row}-${node.col}`}
+                node={node}
+                onMouseDown={handleMouseDown}
+                onMouseEnter={handleMouseEnter}
+                onMouseUp={handleMouseUp}
+              />
+            ))
+          ))}
+        </div>
+        {showTooltip && (
+          <Tooltip 
+            content={tooltipContent} 
+            position={tooltipPosition} 
+            onClose={handleHideTooltip}
+          />
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-50 font-sans">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-4 flex justify-between items-center shadow-md">
+        <div className="flex items-center">
+          <h1 className="text-2xl font-bold">Maze Visualizer</h1>
+          <button 
+            className="ml-4 p-2 rounded hover:bg-gray-700 transition-colors"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label={isMenuOpen ? "Hide menu" : "Show menu"}
+          >
+            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+        
+        <div className="flex space-x-4">
+          <button
+            className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-md flex items-center font-medium transition-colors shadow-sm"
+            onClick={directVisualizeAlgorithm}
+          >
+            <Play size={16} className="mr-2" /> Direct Visualize
+          </button>
+          <button
+            className={`${isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} 
+                       px-6 py-2 rounded-md flex items-center font-medium transition-colors shadow-sm`}
+            onClick={visualizeAlgorithm}
+          >
+            {isRunning ? (
+              <><Pause size={16} className="mr-2" /> Stop</>
+            ) : (
+              <><Play size={16} className="mr-2" /> Visualize!</>
+            )}
+          </button>
+        </div>
+      </div>
+      
+      {/* Toolbar */}
+      <Toolbar 
+        isMenuOpen={isMenuOpen}
+        algorithm={algorithm}
+        setAlgorithm={setAlgorithm}
+        currentTool={currentTool}
+        setCurrentTool={setCurrentTool}
+        clearBoard={clearBoard}
+        clearWallsAndWeights={clearWallsAndWeights}
+        clearPath={clearPath}
+        speed={speed}
+        setSpeed={setSpeed}
+        generateMaze={handleGenerateMaze}
+        onShowTooltip={handleShowTooltip}
+        onHideTooltip={handleHideTooltip}
+      />
+      
+      {/* Legend */}
+      <Legend />
+      
+      {/* Instructions with close button */}
+      {showInstructions && (
+        <div className="bg-blue-50 p-3 text-sm flex items-start gap-2 border-b relative">
+          <AlertTriangle size={18} className="text-blue-700 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold mb-1">How to use:</p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Drag start/target nodes</strong> to reposition</li>
+              <li><strong>Click and drag</strong> to add/remove walls, weights, or food</li>
+              <li><strong>Alt+Click or middle mouse button</strong> to pan the grid</li>
+              <li><strong>Mouse wheel</strong> to zoom in/out</li>
+              <li><strong>Food nodes</strong> act as waypoints - the algorithm will visit them before the target</li>
+              <li><strong>Weight nodes</strong> slow down the algorithm (higher cost to traverse)</li>
+            </ul>
+          </div>
+          <button 
+            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 transition-colors"
+            onClick={() => setShowInstructions(false)}
+            aria-label="Close instructions"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      
+      {/* Grid */}
+      {renderGrid()}
+    </div>
+  );
+} 
