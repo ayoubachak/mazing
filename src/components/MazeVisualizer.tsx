@@ -26,6 +26,7 @@ export default function MazeVisualizer() {
   const [startNode, setStartNode] = useState({ row: 10, col: 10 });
   const [finishNode, setFinishNode] = useState({ row: 10, col: 30 });
   const [isRunning, setIsRunning] = useState(false);
+  const [liveMode, setLiveMode] = useState(false); // new: live path updates after initial run
   const [algorithm, setAlgorithm] = useState('dijkstra');
   const [speed, setSpeed] = useState('fast');
   const [isDraggingStart, setIsDraggingStart] = useState(false);
@@ -94,6 +95,7 @@ export default function MazeVisualizer() {
       el.classList.remove('node-visited', 'node-shortest-path');
       (el as HTMLElement).style.backgroundColor = '';
     });
+    setLiveMode(false); // disable live updates when path cleared
   };
 
   // Add a function to inspect DOM elements during animation
@@ -351,8 +353,8 @@ export default function MazeVisualizer() {
         break;
     }
     updateNodeInGrid(row, col, updatedNode);
-    // If currently visualizing, clear old path and re-run
-    if (isRunning) {
+    // live update path on interactions (post-complete)
+    if (liveMode && !isRunning) {
       clearPath();
       directVisualizeAlgorithm();
     }
@@ -392,8 +394,8 @@ export default function MazeVisualizer() {
     
     setStartNode({ row, col });
     initializeGrid(newGrid);
-    // If live, clear old path and re-run
-    if (isRunning) {
+    // live update after moving start
+    if (liveMode && !isRunning) {
       clearPath();
       directVisualizeAlgorithm();
     }
@@ -432,8 +434,8 @@ export default function MazeVisualizer() {
     
     setFinishNode({ row, col });
     initializeGrid(newGrid);
-    // If live, clear old path and re-run
-    if (isRunning) {
+    // live update after moving finish
+    if (liveMode && !isRunning) {
       clearPath();
       directVisualizeAlgorithm();
     }
@@ -621,6 +623,8 @@ export default function MazeVisualizer() {
         });
         // when path animation done, mark as not running
         setTimeout(() => setIsRunning(false), pathSpeed * nodesInShortestPathOrder.length);
+        // after initial visualization, enable live updates
+        setLiveMode(true);
       }, visitedSpeed * visitedNodesInOrder.length);
       
     } catch (error) {
@@ -765,6 +769,17 @@ export default function MazeVisualizer() {
           >
             <Play size={16} className="mr-2" /> Visualize
           </button>
+        </div>
+        <div className="ml-4 flex items-center">
+          <label className="flex items-center space-x-2 text-sm">
+            <input
+              type="checkbox"
+              className="form-checkbox"
+              checked={liveMode}
+              onChange={e => setLiveMode(e.target.checked)}
+            />
+            <span>Live Update</span>
+          </label>
         </div>
       </div>
       
