@@ -338,4 +338,49 @@ export class VisualizationEngine {
   setSpeed(speed: AnimationSpeed): void {
     this.options.speed = speed;
   }
+  
+  /**
+   * Test animation - applies animations directly to specific nodes
+   * This is a debugging tool to ensure CSS animations can be applied correctly
+   */
+  testAnimation(): void {
+    console.log('VisualizationEngine: Running animation test');
+    
+    // Clear any existing animations
+    this.clearVisualization();
+    
+    // Get some nodes to test with - a 3x3 area in the middle of the grid
+    const testNodes = [];
+    for (let r = 10; r < 13; r++) {
+      for (let c = 15; c < 18; c++) {
+        testNodes.push({row: r, col: c});
+      }
+    }
+    
+    console.log('VisualizationEngine: Testing with nodes:', testNodes);
+    
+    // Apply visited animation to the test nodes with a delay between each
+    testNodes.forEach((node, index) => {
+      setTimeout(() => {
+        const element = this.getNodeElement(node.row, node.col);
+        if (element) {
+          console.log(`VisualizationEngine: Applying visited class to node-${node.row}-${node.col}`);
+          element.classList.add(this.options.visitedClassName!);
+        } else {
+          console.error(`VisualizationEngine: Could not find element for node-${node.row}-${node.col}`);
+        }
+      }, index * 300);
+    });
+    
+    // Apply shortest path animation to a line of nodes after a delay
+    setTimeout(() => {
+      console.log('VisualizationEngine: Testing shortest path animation');
+      for (let c = 15; c < 18; c++) {
+        const element = this.getNodeElement(11, c);
+        if (element) {
+          element.classList.add(this.options.shortestPathClassName!);
+        }
+      }
+    }, testNodes.length * 300 + 500);
+  }
 } 

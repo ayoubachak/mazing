@@ -95,6 +95,27 @@ export const AlgorithmProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       food: foodNodes 
     });
     
+    // Debug the grid to check if there's any walls blocking the path
+    let wallsFound = 0;
+    const wallPositions = [];
+    for (let row = 0; row < grid.length; row++) {
+      for (let col = 0; col < grid[0].length; col++) {
+        if (grid[row][col].isWall) {
+          wallsFound++;
+          if (wallPositions.length < 10) { // limit output to first 10 walls
+            wallPositions.push({row, col});
+          }
+        }
+      }
+    }
+    console.log(`AlgorithmContext: Found ${wallsFound} walls. Sample:`, wallPositions);
+    
+    // Check if there's a direct path between start and finish nodes
+    const startNodeObj = grid[startNode.row][startNode.col];
+    const finishNodeObj = grid[finishNode.row][finishNode.col];
+    console.log('Start node:', startNodeObj);
+    console.log('Finish node:', finishNodeObj);
+    
     clearVisualization();
     setIsRunning(true);
     
@@ -105,7 +126,7 @@ export const AlgorithmProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       switch (selectedAlgorithm) {
         case AlgorithmType.DIJKSTRA:
           console.log('AlgorithmContext: Running Dijkstra');
-          result = algorithmEngine.runDijkstra(startNode, finishNode, foodNodes);
+          result = algorithmEngine.runDebugDijkstra(startNode, finishNode);
           break;
         case AlgorithmType.A_STAR:
           console.log('AlgorithmContext: Running A*');

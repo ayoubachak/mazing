@@ -366,4 +366,39 @@ export class GridModel {
     
     this.initializeGrid();
   }
+
+  /**
+   * Create a test pattern with a guaranteed path
+   * This is useful for debugging to ensure the algorithm works
+   */
+  createTestPattern(): void {
+    console.log('GridModel: Creating test pattern with guaranteed path');
+    
+    // First clear everything
+    this.clearAll();
+    
+    // Create a simple maze pattern with walls
+    for (let col = 5; col < this.cols - 5; col++) {
+      // Create a horizontal wall with a gap
+      if (col !== 15) {
+        this.updateNode(5, col, { isWall: true });
+      }
+      
+      // Create a second horizontal wall below
+      if (col !== 25) {
+        this.updateNode(15, col, { isWall: true });
+      }
+    }
+    
+    // Create a vertical connecting wall
+    for (let row = 6; row < 15; row++) {
+      this.updateNode(row, 30, { isWall: true });
+    }
+    
+    // Place some weights
+    this.updateNode(8, 20, { isWeight: true, weightValue: 5 });
+    this.updateNode(12, 12, { isWeight: true, weightValue: 10 });
+    
+    console.log('GridModel: Test pattern created');
+  }
 } 

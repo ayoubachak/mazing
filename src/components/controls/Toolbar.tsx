@@ -236,6 +236,20 @@ const Toolbar: React.FC = () => {
           <RefreshCw size={18} />
         </button>
         <button
+          className="p-2 rounded-md hover:bg-gray-100 bg-yellow-100"
+          onClick={() => gridModel.createTestPattern()}
+          title="Create Test Pattern (Debug)"
+        >
+          <Grid size={18} />
+        </button>
+        <button
+          className="p-2 rounded-md hover:bg-gray-100 bg-yellow-100"
+          onClick={() => visualizationEngine.testAnimation()}
+          title="Test Animations (Debug)"
+        >
+          <Map size={18} />
+        </button>
+        <button
           className="p-2 rounded-md hover:bg-gray-100"
           onClick={resetView}
           title="Reset View"
