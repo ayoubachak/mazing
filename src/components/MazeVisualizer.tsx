@@ -223,24 +223,28 @@ export default function MazeVisualizer() {
       setTimeout(() => {
         const node = visitedNodesInOrder[i];
         const { row, col } = node;
-        console.log(`Animating visited node at [${row},${col}], i=${i}`);
-        
-        setGrid(prevGrid => {
-          const newGrid = [...prevGrid];
-          const updatedNode = { ...newGrid[row][col], isVisited: true };
-          newGrid[row][col] = updatedNode;
-          return newGrid;
+        // Mark visited in state
+        setGrid(prev => {
+          const copy = [...prev];
+          copy[row][col] = { ...copy[row][col], isVisited: true };
+          return copy;
         });
-
-        forceStyleUpdateOnNode(row, col, true, false);
-        forceUpdate();
-        checkDOMForAnimationClasses(row, col);
+        // Compute heatmap color from blue (start) to red (end)
+        const ratio = visitedNodesInOrder.length > 1 ? i / (visitedNodesInOrder.length - 1) : 0;
+        const hue = 240 * (1 - ratio); // 240=blue -> 0=red
+        const element = document.getElementById(`node-${row}-${col}`);
+        if (element) {
+          element.style.backgroundColor = `hsl(${hue}, 100%, 50%)`;
+        }
+         
       }, speedFactor * i);
     }
   };
 
   // Handle mouse events
   const handleMouseDown = (row: number, col: number, event: React.MouseEvent) => {
+    // Prevent interactions during animation
+    if (isRunning) return;
     // Only respond to left clicks (button === 0)
     if (event.button !== 0) return;
     
@@ -263,6 +267,8 @@ export default function MazeVisualizer() {
   };
 
   const handleMouseEnter = (row: number, col: number) => {
+    // Prevent interactions during animation
+    if (isRunning) return;
     if (row < 0 || row >= rows || col < 0 || col >= cols) return;
     
     if (!isRunning && isMousePressed) {
