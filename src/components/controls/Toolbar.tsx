@@ -51,13 +51,17 @@ const Toolbar: React.FC = () => {
   
   // Handle visualization button click
   const handleVisualize = () => {
+    console.log('Toolbar: handleVisualize clicked, current state:', visualizationState);
+    
     if (
       visualizationState === VisualizationState.RUNNING ||
       visualizationState === VisualizationState.PAUSED
     ) {
+      console.log('Toolbar: Stopping algorithm');
       stopAlgorithm();
       clearVisualization();
     } else {
+      console.log('Toolbar: Running algorithm:', selectedAlgorithm);
       clearPath();
       runAlgorithm();
     }

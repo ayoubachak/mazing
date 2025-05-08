@@ -81,6 +81,12 @@ export class VisualizationEngine {
       return;
     }
     
+    console.log('VisualizationEngine: Starting visualization');
+    console.log('Nodes to visualize:', {
+      visited: this.visitedNodesInOrder.length,
+      shortestPath: this.shortestPathNodesInOrder.length
+    });
+    
     this.animationState = VisualizationState.RUNNING;
     eventBus.publish(EVENTS.VISUALIZATION_STARTED);
     
@@ -168,7 +174,11 @@ export class VisualizationEngine {
    * Get node element by its row and column
    */
   private getNodeElement(row: number, col: number): HTMLElement | null {
-    return document.getElementById(`node-${row}-${col}`);
+    const element = document.getElementById(`node-${row}-${col}`);
+    if (!element) {
+      console.warn(`Could not find node element with id: node-${row}-${col}`);
+    }
+    return element;
   }
   
   /**
@@ -176,8 +186,12 @@ export class VisualizationEngine {
    */
   private animateVisitedNodes(): void {
     if (this.animationState !== VisualizationState.RUNNING) {
+      console.log('VisualizationEngine: Not animating visited nodes, state is not RUNNING');
       return;
     }
+    
+    console.log('VisualizationEngine: Animating visited nodes', 
+      this.currentVisitedIndex, 'to', this.visitedNodesInOrder.length - 1);
     
     const speedFactor = this.getSpeedFactor();
     
@@ -191,6 +205,7 @@ export class VisualizationEngine {
         const element = this.getNodeElement(node.row, node.col);
         
         if (element) {
+          console.log(`VisualizationEngine: Adding visited class to node-${node.row}-${node.col}`);
           element.classList.add(this.options.visitedClassName!);
           
           eventBus.publish(EVENTS.VISUALIZATION_STEP, {
@@ -205,6 +220,7 @@ export class VisualizationEngine {
         
         // If this was the last node, start animating the shortest path
         if (i === this.visitedNodesInOrder.length - 1) {
+          console.log('VisualizationEngine: Finished animating visited nodes, moving to shortest path');
           // Add a slight delay before starting shortest path animation
           window.setTimeout(() => {
             this.animateShortestPath();
@@ -221,14 +237,19 @@ export class VisualizationEngine {
    */
   private animateShortestPath(): void {
     if (this.animationState !== VisualizationState.RUNNING) {
+      console.log('VisualizationEngine: Not animating shortest path, state is not RUNNING');
       return;
     }
     
     // If there's no shortest path, complete the visualization
     if (this.shortestPathNodesInOrder.length === 0) {
+      console.log('VisualizationEngine: No shortest path to animate');
       this.complete();
       return;
     }
+    
+    console.log('VisualizationEngine: Animating shortest path', 
+      this.currentShortestPathIndex, 'to', this.shortestPathNodesInOrder.length - 1);
     
     const speedFactor = this.getSpeedFactor() * 2; // Slower for better visibility
     
@@ -242,6 +263,7 @@ export class VisualizationEngine {
         const element = this.getNodeElement(node.row, node.col);
         
         if (element) {
+          console.log(`VisualizationEngine: Adding shortest path class to node-${node.row}-${node.col}`);
           element.classList.add(this.options.shortestPathClassName!);
           
           eventBus.publish(EVENTS.VISUALIZATION_STEP, {
@@ -256,6 +278,7 @@ export class VisualizationEngine {
         
         // If this was the last node, complete the visualization
         if (i === this.shortestPathNodesInOrder.length - 1) {
+          console.log('VisualizationEngine: Finished animating shortest path');
           this.complete();
         }
       }, speedFactor * (i - this.currentShortestPathIndex));

@@ -29,17 +29,23 @@ const Node: React.FC<NodeProps> = ({ node, size = 24 }) => {
 
   // Determine the CSS classes based on the node's state
   const getNodeClassName = () => {
+    // Always include 'node' class for CSS animations to work
     const baseClass = "node border border-gray-300 flex items-center justify-center transition-all duration-300 select-none";
+    let classes = baseClass;
     
-    if (isStart) return `${baseClass} bg-gradient-to-br from-purple-600 to-purple-800 cursor-grab`;
-    if (isFinish) return `${baseClass} bg-gradient-to-br from-purple-800 to-purple-950 cursor-grab`;
-    if (isWall) return `${baseClass} bg-gradient-to-br from-gray-700 to-gray-900 shadow-inner`;
-    if (isFood) return `${baseClass} bg-gradient-to-br from-yellow-300 to-yellow-500`;
-    if (isWeight) return `${baseClass} bg-gradient-to-br from-blue-200 to-blue-400`;
-    if (isShortest) return `${baseClass} node-shortest-path bg-yellow-300`;
-    if (isVisited) return `${baseClass} node-visited bg-cyan-400`;
+    // Add state-specific classes
+    if (isStart) classes += " bg-gradient-to-br from-purple-600 to-purple-800 cursor-grab";
+    else if (isFinish) classes += " bg-gradient-to-br from-purple-800 to-purple-950 cursor-grab";
+    else if (isWall) classes += " bg-gradient-to-br from-gray-700 to-gray-900 shadow-inner";
+    else if (isFood) classes += " bg-gradient-to-br from-yellow-300 to-yellow-500";
+    else if (isWeight) classes += " bg-gradient-to-br from-blue-200 to-blue-400";
+    else classes += " bg-white hover:bg-gray-100";
     
-    return `${baseClass} bg-white hover:bg-gray-100`;
+    // These classes will be applied by the VisualizationEngine, but we'll initialize them if the state is already set
+    if (isShortest) classes += " node-shortest-path";
+    else if (isVisited) classes += " node-visited";
+    
+    return classes;
   };
   
   return (
@@ -56,6 +62,18 @@ const Node: React.FC<NodeProps> = ({ node, size = 24 }) => {
       onDragStart={(e) => e.preventDefault()}
       data-testid={`node-${row}-${col}`}
       role="gridcell"
+      data-row={row}
+      data-col={col}
+      data-state={
+        isStart ? "start" :
+        isFinish ? "finish" :
+        isFood ? "food" :
+        isWall ? "wall" :
+        isWeight ? "weight" :
+        isVisited ? "visited" :
+        isShortest ? "shortest" :
+        "unvisited"
+      }
       aria-label={
         isStart ? "Start node" :
         isFinish ? "Target node" :

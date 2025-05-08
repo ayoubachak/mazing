@@ -156,6 +156,8 @@ export class AlgorithmEngine {
     finishNode: NodePosition, 
     foodNodes: NodePosition[] = []
   ): AlgorithmResult {
+    console.log('AlgorithmEngine: Running Dijkstra', {startNode, finishNode, foodNodes});
+    
     // Create a working copy of the grid
     const workingGrid = this.prepareGrid();
     
@@ -190,6 +192,7 @@ export class AlgorithmEngine {
       
       if (result.nodesInOrder.length === 0) {
         // Path not found
+        console.log('AlgorithmEngine: No path found to target', targetNode);
         break;
       }
       
@@ -198,15 +201,21 @@ export class AlgorithmEngine {
       currentStartNode = targetNode;
     }
     
-    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, {
-      visitedNodesInOrder: allVisitedNodes,
-      nodesInShortestPathOrder: allNodesInPath
+    console.log('AlgorithmEngine: Dijkstra complete', {
+      visitedNodes: allVisitedNodes.length,
+      pathNodes: allNodesInPath.length
     });
     
-    return {
+    const result = {
       visitedNodesInOrder: allVisitedNodes,
       nodesInShortestPathOrder: allNodesInPath
     };
+    
+    // Publish algorithm completion event
+    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, result);
+    
+    // Return results for visualization
+    return result;
   }
   
   /**
@@ -255,6 +264,8 @@ export class AlgorithmEngine {
     finishNode: NodePosition, 
     foodNodes: NodePosition[] = []
   ): AlgorithmResult {
+    console.log('AlgorithmEngine: Running A*', {startNode, finishNode, foodNodes});
+    
     // Create a working copy of the grid
     const workingGrid = this.prepareGrid();
     
@@ -262,10 +273,16 @@ export class AlgorithmEngine {
     const start = workingGrid[startNode.row][startNode.col];
     const finish = workingGrid[finishNode.row][finishNode.col];
     
-    // Set start node distance to 0 and calculate heuristic
+    // Set start node distance to 0 and calculate heuristics
     start.distance = 0;
-    start.heuristic = this.calculateManhattanDistance(start, finish);
-    start.fScore = start.distance + start.heuristic;
+    
+    // Calculate heuristics for all nodes
+    for (const row of workingGrid) {
+      for (const node of row) {
+        node.heuristic = this.calculateManhattanDistance(node, finish);
+        node.fScore = node.distance + node.heuristic;
+      }
+    }
     
     let targetNodes = foodNodes.length > 0 
       ? [...foodNodes.map(food => workingGrid[food.row][food.col]), finish]
@@ -282,9 +299,10 @@ export class AlgorithmEngine {
         for (let node of row) {
           if (node !== currentStartNode) {
             node.distance = Infinity;
+            node.previousNode = null;
+            // Recalculate heuristic for current target
             node.heuristic = this.calculateManhattanDistance(node, targetNode);
             node.fScore = Infinity;
-            node.previousNode = null;
           }
         }
       }
@@ -293,6 +311,7 @@ export class AlgorithmEngine {
       
       if (result.nodesInOrder.length === 0) {
         // Path not found
+        console.log('AlgorithmEngine: No path found to target', targetNode);
         break;
       }
       
@@ -301,15 +320,20 @@ export class AlgorithmEngine {
       currentStartNode = targetNode;
     }
     
-    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, {
-      visitedNodesInOrder: allVisitedNodes,
-      nodesInShortestPathOrder: allNodesInPath
+    console.log('AlgorithmEngine: A* complete', {
+      visitedNodes: allVisitedNodes.length,
+      pathNodes: allNodesInPath.length
     });
     
-    return {
+    const result = {
       visitedNodesInOrder: allVisitedNodes,
       nodesInShortestPathOrder: allNodesInPath
     };
+    
+    // Publish algorithm completion event
+    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, result);
+    
+    return result;
   }
   
   /**
@@ -351,19 +375,24 @@ export class AlgorithmEngine {
   }
   
   /**
-   * Run Breadth-First Search algorithm
+   * Run BFS algorithm
    */
   runBFS(
     startNode: NodePosition, 
     finishNode: NodePosition, 
     foodNodes: NodePosition[] = []
   ): AlgorithmResult {
+    console.log('AlgorithmEngine: Running BFS', {startNode, finishNode, foodNodes});
+    
     // Create a working copy of the grid
     const workingGrid = this.prepareGrid();
     
     // Get start and finish nodes from the grid
     const start = workingGrid[startNode.row][startNode.col];
     const finish = workingGrid[finishNode.row][finishNode.col];
+    
+    // Set start node as visited
+    start.isVisited = true;
     
     let targetNodes = foodNodes.length > 0 
       ? [...foodNodes.map(food => workingGrid[food.row][food.col]), finish]
@@ -375,7 +404,7 @@ export class AlgorithmEngine {
     
     // Process each target node
     for (let targetNode of targetNodes) {
-      // Reset for each iteration
+      // Reset visited status for each iteration
       for (let row of workingGrid) {
         for (let node of row) {
           if (node !== currentStartNode) {
@@ -389,6 +418,7 @@ export class AlgorithmEngine {
       
       if (result.nodesInOrder.length === 0) {
         // Path not found
+        console.log('AlgorithmEngine: No path found to target', targetNode);
         break;
       }
       
@@ -397,15 +427,20 @@ export class AlgorithmEngine {
       currentStartNode = targetNode;
     }
     
-    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, {
-      visitedNodesInOrder: allVisitedNodes,
-      nodesInShortestPathOrder: allNodesInPath
+    console.log('AlgorithmEngine: BFS complete', {
+      visitedNodes: allVisitedNodes.length,
+      pathNodes: allNodesInPath.length
     });
     
-    return {
+    const result = {
       visitedNodesInOrder: allVisitedNodes,
       nodesInShortestPathOrder: allNodesInPath
     };
+    
+    // Publish algorithm completion event
+    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, result);
+    
+    return result;
   }
   
   /**
@@ -445,19 +480,24 @@ export class AlgorithmEngine {
   }
   
   /**
-   * Run Depth-First Search algorithm
+   * Run DFS algorithm
    */
   runDFS(
     startNode: NodePosition, 
     finishNode: NodePosition, 
     foodNodes: NodePosition[] = []
   ): AlgorithmResult {
+    console.log('AlgorithmEngine: Running DFS', {startNode, finishNode, foodNodes});
+    
     // Create a working copy of the grid
     const workingGrid = this.prepareGrid();
     
     // Get start and finish nodes from the grid
     const start = workingGrid[startNode.row][startNode.col];
     const finish = workingGrid[finishNode.row][finishNode.col];
+    
+    // Set start node as visited
+    start.isVisited = true;
     
     let targetNodes = foodNodes.length > 0 
       ? [...foodNodes.map(food => workingGrid[food.row][food.col]), finish]
@@ -469,7 +509,7 @@ export class AlgorithmEngine {
     
     // Process each target node
     for (let targetNode of targetNodes) {
-      // Reset for each iteration
+      // Reset visited status for each iteration
       for (let row of workingGrid) {
         for (let node of row) {
           if (node !== currentStartNode) {
@@ -483,6 +523,7 @@ export class AlgorithmEngine {
       
       if (result.nodesInOrder.length === 0) {
         // Path not found
+        console.log('AlgorithmEngine: No path found to target', targetNode);
         break;
       }
       
@@ -491,15 +532,20 @@ export class AlgorithmEngine {
       currentStartNode = targetNode;
     }
     
-    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, {
-      visitedNodesInOrder: allVisitedNodes,
-      nodesInShortestPathOrder: allNodesInPath
+    console.log('AlgorithmEngine: DFS complete', {
+      visitedNodes: allVisitedNodes.length,
+      pathNodes: allNodesInPath.length
     });
     
-    return {
+    const result = {
       visitedNodesInOrder: allVisitedNodes,
       nodesInShortestPathOrder: allNodesInPath
     };
+    
+    // Publish algorithm completion event
+    eventBus.publish(EVENTS.ALGORITHM_COMPLETED, result);
+    
+    return result;
   }
   
   /**

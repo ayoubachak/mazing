@@ -85,3 +85,18 @@ body {
   -moz-user-select: none;
   -ms-user-select: none;
 }
+
+/* Make sure animation classes override other styling */
+.node.node-visited {
+  background-color: rgba(0, 158, 255, 0.8) !important;
+}
+
+.node.node-shortest-path {
+  background-color: rgba(255, 207, 0, 1) !important;
+}
+
+/* Override for special nodes */
+.node.bg-gradient-to-br.node-visited,
+.node.bg-gradient-to-br.node-shortest-path {
+  background-image: none !important;
+}

@@ -82,7 +82,18 @@ export const AlgorithmProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   
   // Run algorithm
   const runAlgorithm = () => {
-    if (isRunning) return;
+    if (isRunning) {
+      console.log('AlgorithmContext: Already running, not starting again');
+      return;
+    }
+    
+    console.log('AlgorithmContext: Running algorithm', selectedAlgorithm);
+    console.log('AlgorithmContext: Grid, nodes:', { 
+      gridSize: `${grid.length}x${grid[0].length}`,
+      start: startNode, 
+      finish: finishNode, 
+      food: foodNodes 
+    });
     
     clearVisualization();
     setIsRunning(true);
@@ -93,27 +104,38 @@ export const AlgorithmProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       switch (selectedAlgorithm) {
         case AlgorithmType.DIJKSTRA:
+          console.log('AlgorithmContext: Running Dijkstra');
           result = algorithmEngine.runDijkstra(startNode, finishNode, foodNodes);
           break;
         case AlgorithmType.A_STAR:
+          console.log('AlgorithmContext: Running A*');
           result = algorithmEngine.runAStar(startNode, finishNode, foodNodes);
           break;
         case AlgorithmType.BFS:
+          console.log('AlgorithmContext: Running BFS');
           result = algorithmEngine.runBFS(startNode, finishNode, foodNodes);
           break;
         case AlgorithmType.DFS:
+          console.log('AlgorithmContext: Running DFS');
           result = algorithmEngine.runDFS(startNode, finishNode, foodNodes);
           break;
         default:
+          console.log('AlgorithmContext: Unknown algorithm, defaulting to Dijkstra');
           result = algorithmEngine.runDijkstra(startNode, finishNode, foodNodes);
       }
+      
+      console.log('AlgorithmContext: Algorithm complete, got result:', { 
+        visitedNodes: result.visitedNodesInOrder.length,
+        pathNodes: result.nodesInShortestPathOrder.length
+      });
       
       setLastResult(result);
       
       // Start visualization
+      console.log('AlgorithmContext: Starting visualization');
       visualize(result);
     } catch (error) {
-      console.error('Error running algorithm:', error);
+      console.error('AlgorithmContext: Error running algorithm:', error);
       setIsRunning(false);
     }
   };
