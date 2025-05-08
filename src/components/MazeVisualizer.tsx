@@ -96,6 +96,9 @@ export default function MazeVisualizer() {
       (el as HTMLElement).style.backgroundColor = '';
     });
     setLiveMode(false); // disable live updates when path cleared
+    // clear any pending live timeouts
+    liveTimeouts.current.forEach(id => clearTimeout(id));
+    liveTimeouts.current = [];
   };
 
   // Add a function to inspect DOM elements during animation
@@ -303,6 +306,11 @@ export default function MazeVisualizer() {
     setIsMousePressed(false);
     setIsDraggingStart(false);
     setIsDraggingFinish(false);
+    // After completing interactions, re-run path if live mode
+    if (liveMode && !isRunning) {
+      clearPath();
+      directVisualizeAlgorithm();
+    }
   };
 
   // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/max-switch-case, sonarjs/no-identical-expressions
@@ -353,11 +361,6 @@ export default function MazeVisualizer() {
         break;
     }
     updateNodeInGrid(row, col, updatedNode);
-    // live update path on interactions (post-complete)
-    if (liveMode && !isRunning) {
-      clearPath();
-      directVisualizeAlgorithm();
-    }
   };
 
   // Move start and finish nodes
@@ -394,11 +397,6 @@ export default function MazeVisualizer() {
     
     setStartNode({ row, col });
     initializeGrid(newGrid);
-    // live update after moving start
-    if (liveMode && !isRunning) {
-      clearPath();
-      directVisualizeAlgorithm();
-    }
   };
 
   const moveFinishNode = (row: number, col: number) => {
@@ -434,11 +432,6 @@ export default function MazeVisualizer() {
     
     setFinishNode({ row, col });
     initializeGrid(newGrid);
-    // live update after moving finish
-    if (liveMode && !isRunning) {
-      clearPath();
-      directVisualizeAlgorithm();
-    }
   };
 
   // Add a function to inspect the grid state for debugging
@@ -556,7 +549,12 @@ export default function MazeVisualizer() {
   };
 
   // Add a "direct visualization" button and function that completely bypasses React state
+  // Ref to store active animation timeouts for live updates
+  const liveTimeouts = useRef<number[]>([]);
   const directVisualizeAlgorithm = () => {
+    // clear previous live animation timeouts
+    liveTimeouts.current.forEach(id => clearTimeout(id));
+    liveTimeouts.current = [];
     console.log('Directly visualizing algorithm (bypassing React state)');
     // mark as running to enable live updates
     setIsRunning(true);
@@ -605,27 +603,32 @@ export default function MazeVisualizer() {
       
       // Animate visited nodes
       visitedNodesInOrder.forEach((node, index) => {
-        setTimeout(() => {
+        const id = window.setTimeout(() => {
           const { row, col } = node;
           const element = document.getElementById(`node-${row}-${col}`);
           if (element) element.classList.add('node-visited');
         }, visitedSpeed * index);
+        liveTimeouts.current.push(id);
       });
       
       // Animate shortest path after visited nodes
-      setTimeout(() => {
+      const pathStartId = window.setTimeout(() => {
         nodesInShortestPathOrder.forEach((node, index) => {
-          setTimeout(() => {
+          const id2 = window.setTimeout(() => {
             const { row, col } = node;
             const element = document.getElementById(`node-${row}-${col}`);
             if (element) element.classList.add('node-shortest-path');
           }, pathSpeed * index);
+          liveTimeouts.current.push(id2);
         });
         // when path animation done, mark as not running
-        setTimeout(() => setIsRunning(false), pathSpeed * nodesInShortestPathOrder.length);
-        // after initial visualization, enable live updates
-        setLiveMode(true);
+        const doneId = window.setTimeout(() => setIsRunning(false), pathSpeed * nodesInShortestPathOrder.length);
+        liveTimeouts.current.push(doneId);
       }, visitedSpeed * visitedNodesInOrder.length);
+      liveTimeouts.current.push(pathStartId);
+      
+      // after initial visualization, enable live updates
+      setLiveMode(true);
       
     } catch (error) {
       console.error('Error in direct visualization:', error);
