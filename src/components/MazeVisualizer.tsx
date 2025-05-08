@@ -26,7 +26,6 @@ export default function MazeVisualizer() {
   const [startNode, setStartNode] = useState({ row: 10, col: 10 });
   const [finishNode, setFinishNode] = useState({ row: 10, col: 30 });
   const [isRunning, setIsRunning] = useState(false);
-  const [liveMode, setLiveMode] = useState(false); // new: live path updates after initial run
   const [algorithm, setAlgorithm] = useState('dijkstra');
   const [speed, setSpeed] = useState('fast');
   const [isDraggingStart, setIsDraggingStart] = useState(false);
@@ -41,7 +40,11 @@ export default function MazeVisualizer() {
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipContent, setTooltipContent] = useState('');
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const [animateUpdates, setAnimateUpdates] = useState(true); // new toggle for live update animation
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Ref for debouncing live updates
+  const liveUpdateTimer = useRef<number | null>(null);
 
   // Use custom hook for grid operations
   const {
@@ -95,10 +98,7 @@ export default function MazeVisualizer() {
       el.classList.remove('node-visited', 'node-shortest-path');
       (el as HTMLElement).style.backgroundColor = '';
     });
-    setLiveMode(false); // disable live updates when path cleared
-    // clear any pending live timeouts
-    liveTimeouts.current.forEach(id => clearTimeout(id));
-    liveTimeouts.current = [];
+    // liveMode removed
   };
 
   // Add a function to inspect DOM elements during animation
@@ -306,10 +306,29 @@ export default function MazeVisualizer() {
     setIsMousePressed(false);
     setIsDraggingStart(false);
     setIsDraggingFinish(false);
-    // After completing interactions, re-run path if live mode
-    if (liveMode && !isRunning) {
+    // After completing interactions, re-run path based on animateUpdates
+    if (!isRunning) {
       clearPath();
-      directVisualizeAlgorithm();
+      if (liveUpdateTimer.current) window.clearTimeout(liveUpdateTimer.current);
+      liveUpdateTimer.current = window.setTimeout(() => {
+        // compute shortest path nodes
+        const startNodeObj = grid[startNode.row][startNode.col];
+        const finishNodeObj = grid[finishNode.row][finishNode.col];
+        let result;
+        try {
+          switch (algorithm) {
+            case 'astar': result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes); break;
+            case 'bfs': result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+            case 'dfs': result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+            default: result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+          }
+        } catch { return; }
+        if (animateUpdates) {
+          animateShortestPath(result.nodesInShortestPathOrder);
+        } else {
+          directDrawShortestPath();
+        }
+      }, 200) as unknown as number;
     }
   };
 
@@ -627,12 +646,36 @@ export default function MazeVisualizer() {
       }, visitedSpeed * visitedNodesInOrder.length);
       liveTimeouts.current.push(pathStartId);
       
-      // after initial visualization, enable live updates
-      setLiveMode(true);
-      
     } catch (error) {
       console.error('Error in direct visualization:', error);
     }
+  };
+
+  /** Draw only the shortest path immediately (no visited animation) */
+  const directDrawShortestPath = () => {
+    // clear previous path classes
+    document.querySelectorAll('.node-shortest-path').forEach(el => {
+      el.classList.remove('node-shortest-path');
+      (el as HTMLElement).style.backgroundColor = '';
+    });
+    // compute path
+    const startNodeObj = grid[startNode.row][startNode.col];
+    const finishNodeObj = grid[finishNode.row][finishNode.col];
+    let result;
+    try {
+      switch (algorithm) {
+        case 'dijkstra': result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        case 'astar': result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        case 'bfs': result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        case 'dfs': result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes); break;
+        default: result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+      }
+    } catch { return; }
+    // highlight shortest path immediately
+    result.nodesInShortestPathOrder.forEach(node => {
+      const el = document.getElementById(`node-${node.row}-${node.col}`);
+      if (el) el.classList.add('node-shortest-path');
+    });
   };
 
   // Handle grid viewport navigation
@@ -772,18 +815,18 @@ export default function MazeVisualizer() {
           >
             <Play size={16} className="mr-2" /> Visualize
           </button>
-        </div>
-        <div className="ml-4 flex items-center">
-          <label className="flex items-center space-x-2 text-sm">
+          {/* Animate Updates toggle */}
+          <label className="flex items-center ml-4 text-sm text-white">
             <input
               type="checkbox"
-              className="form-checkbox"
-              checked={liveMode}
-              onChange={e => setLiveMode(e.target.checked)}
+              className="form-checkbox mr-2"
+              checked={animateUpdates}
+              onChange={e => setAnimateUpdates(e.target.checked)}
             />
-            <span>Live Update</span>
+            Animate Updates
           </label>
         </div>
+        {/* Live Update removed; always instant redraw on mouseUp */}
       </div>
       
       {/* Toolbar */}
