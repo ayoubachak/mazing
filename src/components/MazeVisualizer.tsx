@@ -351,6 +351,11 @@ export default function MazeVisualizer() {
         break;
     }
     updateNodeInGrid(row, col, updatedNode);
+    // If currently visualizing, clear old path and re-run
+    if (isRunning) {
+      clearPath();
+      directVisualizeAlgorithm();
+    }
   };
 
   // Move start and finish nodes
@@ -387,6 +392,11 @@ export default function MazeVisualizer() {
     
     setStartNode({ row, col });
     initializeGrid(newGrid);
+    // If live, clear old path and re-run
+    if (isRunning) {
+      clearPath();
+      directVisualizeAlgorithm();
+    }
   };
 
   const moveFinishNode = (row: number, col: number) => {
@@ -422,6 +432,11 @@ export default function MazeVisualizer() {
     
     setFinishNode({ row, col });
     initializeGrid(newGrid);
+    // If live, clear old path and re-run
+    if (isRunning) {
+      clearPath();
+      directVisualizeAlgorithm();
+    }
   };
 
   // Add a function to inspect the grid state for debugging
@@ -541,7 +556,9 @@ export default function MazeVisualizer() {
   // Add a "direct visualization" button and function that completely bypasses React state
   const directVisualizeAlgorithm = () => {
     console.log('Directly visualizing algorithm (bypassing React state)');
-    
+    // mark as running to enable live updates
+    setIsRunning(true);
+
     // Clear any existing visualization first
     document.querySelectorAll('.node-visited, .node-shortest-path').forEach(el => {
       el.classList.remove('node-visited', 'node-shortest-path');
@@ -602,6 +619,8 @@ export default function MazeVisualizer() {
             if (element) element.classList.add('node-shortest-path');
           }, pathSpeed * index);
         });
+        // when path animation done, mark as not running
+        setTimeout(() => setIsRunning(false), pathSpeed * nodesInShortestPathOrder.length);
       }, visitedSpeed * visitedNodesInOrder.length);
       
     } catch (error) {
@@ -653,8 +672,7 @@ export default function MazeVisualizer() {
     if (isRunning) return;
     // Reset food nodes before generating maze
     setFoodNodes([]);
-    setCurrentMaze(type);
-    
+    // Generate and apply maze
     if (type === 'random') {
       const newGrid = generateRandomMaze([...grid], startNode, finishNode);
       initializeGrid(newGrid);
