@@ -1,195 +1,172 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { AlgorithmEngine } from '../core/AlgorithmEngine';
-import type { AlgorithmResult } from '../core/AlgorithmEngine';
-import { useGrid } from './GridContext';
-import { useVisualization } from './VisualizationContext';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { runDijkstra, runAStar, runBFS, runDFS } from '../algorithms/pathfinding';
+import { useGridContext } from './GridContext';
+import { useVisualizationContext } from './VisualizationContext';
 import { eventBus, EVENTS } from '../core/EventBus';
-import type { NodePosition } from '../core/GridModel';
 
-// Algorithm types
-export enum AlgorithmType {
-  DIJKSTRA = 'dijkstra',
-  A_STAR = 'astar',
-  BFS = 'bfs',
-  DFS = 'dfs'
+interface AlgorithmContextType {
+  algorithm: string;
+  setAlgorithm: (algorithm: string) => void;
+  runSelectedAlgorithm: () => void;
+  isCalculating: boolean;
 }
 
-// Context interface
-interface AlgorithmContextValue {
-  // Algorithm state
-  selectedAlgorithm: AlgorithmType;
-  isRunning: boolean;
-  lastResult: AlgorithmResult | null;
-  
-  // Algorithm actions
-  setAlgorithm: (algorithm: AlgorithmType) => void;
-  runAlgorithm: () => void;
-  stopAlgorithm: () => void;
-  
-  // Algorithm engine reference
-  algorithmEngine: AlgorithmEngine;
-}
+const AlgorithmContext = createContext<AlgorithmContextType | undefined>(undefined);
 
-// Create the context
-export const AlgorithmContext = createContext<AlgorithmContextValue | undefined>(undefined);
+export const AlgorithmProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  const [algorithm, setAlgorithm] = useState('dijkstra');
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [enableRealTimeUpdates, setEnableRealTimeUpdates] = useState(true);
+  
+  // Use a ref to track calculating state without triggering effect re-runs
+  const isCalculatingRef = useRef(isCalculating);
+  
+  // Update ref when state changes
+  useEffect(() => {
+    isCalculatingRef.current = isCalculating;
+  }, [isCalculating]);
+  
+  const { grid, startNode, finishNode, foodNodes } = useGridContext();
+  const { startVisualization, resetVisualization, visualizationState } = useVisualizationContext();
+  
+  // Helper function to run algorithm and get results
+  const calculatePath = useCallback(() => {
+    if (!grid || isCalculatingRef.current) return null;
 
-// Provider component
-export const AlgorithmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Get grid and visualization contexts
-  const { grid, gridModel, startNode, finishNode, foodNodes } = useGrid();
-  const { visualize, stopVisualization, clearVisualization, visualizationState } = useVisualization();
-  
-  // Create the algorithm engine once
-  const algorithmEngine = useMemo(() => {
-    return new AlgorithmEngine(grid);
-  }, [grid]);
-  
-  // React state for algorithm
-  const [selectedAlgorithm, setSelectedAlgorithm] = useState<AlgorithmType>(AlgorithmType.DIJKSTRA);
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [lastResult, setLastResult] = useState<AlgorithmResult | null>(null);
-  
-  // Update algorithm engine's grid when it changes
-  useEffect(() => {
-    algorithmEngine.updateGrid(grid);
-  }, [algorithmEngine, grid]);
-  
-  // Subscribe to algorithm events from the event bus
-  useEffect(() => {
-    const completedUnsubscribe = eventBus.subscribe(EVENTS.ALGORITHM_COMPLETED, (data: AlgorithmResult) => {
-      setLastResult(data);
-      setIsRunning(false);
+    console.log('AlgorithmContext: Calculating path using', algorithm);
+    
+    // Get the start and finish nodes from the grid
+    const startNodeObj = grid[startNode.row][startNode.col];
+    const finishNodeObj = grid[finishNode.row][finishNode.col];
+    
+    let result;
+    try {
+      switch (algorithm) {
+        case 'dijkstra':
+          console.log('Running Dijkstra with', startNodeObj, finishNodeObj, foodNodes);
+          result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+          break;
+        case 'astar':
+          result = runAStar(grid, startNodeObj, finishNodeObj, foodNodes);
+          break;
+        case 'bfs':
+          result = runBFS(grid, startNodeObj, finishNodeObj, foodNodes);
+          break;
+        case 'dfs':
+          result = runDFS(grid, startNodeObj, finishNodeObj, foodNodes);
+          break;
+        default:
+          result = runDijkstra(grid, startNodeObj, finishNodeObj, foodNodes);
+      }
       
-      // Start visualization when algorithm completes
-      visualize(data);
-    });
-    
-    const algorithmChangedUnsubscribe = eventBus.subscribe(EVENTS.ALGORITHM_CHANGED, (data) => {
-      setSelectedAlgorithm(data.algorithm);
-    });
-    
-    return () => {
-      completedUnsubscribe();
-      algorithmChangedUnsubscribe();
-    };
-  }, [visualize]);
+      console.log('AlgorithmContext: Path calculation result', {
+        algorithm,
+        visitedNodes: result ? result.visitedNodesInOrder.length : 0,
+        shortestPath: result ? result.nodesInShortestPathOrder.length : 0
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Algorithm error:', error);
+      return null;
+    }
+  }, [algorithm, grid, startNode, finishNode, foodNodes]);
   
-  // Set algorithm type
-  const setAlgorithm = (algorithm: AlgorithmType) => {
-    setSelectedAlgorithm(algorithm);
-    eventBus.publish(EVENTS.ALGORITHM_CHANGED, { algorithm });
-  };
-  
-  // Run algorithm
-  const runAlgorithm = () => {
-    if (isRunning) {
-      console.log('AlgorithmContext: Already running, not starting again');
+  // Function to run algorithm with visualization
+  const runSelectedAlgorithm = useCallback(() => {
+    if (!grid || isCalculating) {
+      console.log('AlgorithmContext: Cannot run - grid missing or already calculating');
       return;
     }
     
-    console.log('AlgorithmContext: Running algorithm', selectedAlgorithm);
-    console.log('AlgorithmContext: Grid, nodes:', { 
-      gridSize: `${grid.length}x${grid[0].length}`,
-      start: startNode, 
-      finish: finishNode, 
-      food: foodNodes 
-    });
+    console.log('AlgorithmContext: Running selected algorithm:', algorithm);
+    setIsCalculating(true);
+    resetVisualization();
     
-    // Debug the grid to check if there's any walls blocking the path
-    let wallsFound = 0;
-    const wallPositions = [];
-    for (let row = 0; row < grid.length; row++) {
-      for (let col = 0; col < grid[0].length; col++) {
-        if (grid[row][col].isWall) {
-          wallsFound++;
-          if (wallPositions.length < 10) { // limit output to first 10 walls
-            wallPositions.push({row, col});
+    // Small timeout to ensure the UI is updated before starting the algorithm
+    setTimeout(() => {
+      try {
+        const result = calculatePath();
+        
+        if (result && result.visitedNodesInOrder.length > 0) {
+          console.log('AlgorithmContext: Starting visualization with', 
+            result.visitedNodesInOrder.length, 'visited nodes and',
+            result.nodesInShortestPathOrder.length, 'shortest path nodes');
+          
+          // Show a warning if we have visited nodes but no path was found
+          if (result.nodesInShortestPathOrder.length === 0) {
+            console.warn('AlgorithmContext: Nodes were visited but no valid path to destination was found');
+            // Continue with visualization to show explored areas
+          }
+          
+          // Use another timeout to ensure DOM updates have time to complete
+          setTimeout(() => {
+            startVisualization(result.visitedNodesInOrder, result.nodesInShortestPathOrder);
+            // Use a timeout to set isCalculating to false after visualization has started
+            setTimeout(() => {
+              setIsCalculating(false);
+            }, 100);
+          }, 50);
+        } else {
+          console.warn('AlgorithmContext: No valid path found or algorithm returned no results');
+          setIsCalculating(false);
+        }
+      } catch (error) {
+        console.error('AlgorithmContext: Error running algorithm:', error);
+        setIsCalculating(false);
+      }
+    }, 100);
+  }, [grid, isCalculating, resetVisualization, calculatePath, startVisualization, algorithm]);
+  
+  // Subscribe to path update requests
+  useEffect(() => {
+    const pathUpdateSubscribe = eventBus.subscribe(EVENTS.PATH_UPDATED, () => {
+      if (enableRealTimeUpdates) {
+        // Only execute if we're not already calculating 
+        // and if visualization is not actively running
+        if (!isCalculatingRef.current) {
+          const result = calculatePath();
+          if (result && result.visitedNodesInOrder.length > 0) {
+            startVisualization(result.visitedNodesInOrder, result.nodesInShortestPathOrder);
           }
         }
       }
-    }
-    console.log(`AlgorithmContext: Found ${wallsFound} walls. Sample:`, wallPositions);
+    });
     
-    // Check if there's a direct path between start and finish nodes
-    const startNodeObj = grid[startNode.row][startNode.col];
-    const finishNodeObj = grid[finishNode.row][finishNode.col];
-    console.log('Start node:', startNodeObj);
-    console.log('Finish node:', finishNodeObj);
-    
-    clearVisualization();
-    setIsRunning(true);
-    
-    // Execute the appropriate algorithm
-    let result: AlgorithmResult;
-    
-    try {
-      switch (selectedAlgorithm) {
-        case AlgorithmType.DIJKSTRA:
-          console.log('AlgorithmContext: Running Dijkstra');
-          result = algorithmEngine.runDebugDijkstra(startNode, finishNode);
-          break;
-        case AlgorithmType.A_STAR:
-          console.log('AlgorithmContext: Running A*');
-          result = algorithmEngine.runAStar(startNode, finishNode, foodNodes);
-          break;
-        case AlgorithmType.BFS:
-          console.log('AlgorithmContext: Running BFS');
-          result = algorithmEngine.runBFS(startNode, finishNode, foodNodes);
-          break;
-        case AlgorithmType.DFS:
-          console.log('AlgorithmContext: Running DFS');
-          result = algorithmEngine.runDFS(startNode, finishNode, foodNodes);
-          break;
-        default:
-          console.log('AlgorithmContext: Unknown algorithm, defaulting to Dijkstra');
-          result = algorithmEngine.runDijkstra(startNode, finishNode, foodNodes);
-      }
-      
-      console.log('AlgorithmContext: Algorithm complete, got result:', { 
-        visitedNodes: result.visitedNodesInOrder.length,
-        pathNodes: result.nodesInShortestPathOrder.length
-      });
-      
-      setLastResult(result);
-      
-      // Start visualization
-      console.log('AlgorithmContext: Starting visualization');
-      visualize(result);
-    } catch (error) {
-      console.error('AlgorithmContext: Error running algorithm:', error);
-      setIsRunning(false);
-    }
-  };
+    return () => {
+      pathUpdateSubscribe();
+    };
+  }, [enableRealTimeUpdates, calculatePath, startVisualization]);
   
-  // Stop algorithm and visualization
-  const stopAlgorithm = () => {
-    setIsRunning(false);
-    stopVisualization();
-  };
-  
-  // Create context value
-  const contextValue: AlgorithmContextValue = {
-    selectedAlgorithm,
-    isRunning,
-    lastResult,
-    setAlgorithm,
-    runAlgorithm,
-    stopAlgorithm,
-    algorithmEngine
-  };
+  // When algorithm changes, reset visualization
+  // Using a ref to track if this is the first render
+  const isFirstRenderRef = useRef(true);
+  useEffect(() => {
+    // Skip the reset on the first render to prevent infinite loops
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+    
+    resetVisualization();
+  }, [algorithm, resetVisualization]);
   
   return (
-    <AlgorithmContext.Provider value={contextValue}>
+    <AlgorithmContext.Provider value={{
+      algorithm,
+      setAlgorithm,
+      runSelectedAlgorithm,
+      isCalculating
+    }}>
       {children}
     </AlgorithmContext.Provider>
   );
 };
 
-// Custom hook for using the algorithm context
-export const useAlgorithm = (): AlgorithmContextValue => {
+export const useAlgorithmContext = () => {
   const context = useContext(AlgorithmContext);
   if (context === undefined) {
-    throw new Error('useAlgorithm must be used within an AlgorithmProvider');
+    throw new Error('useAlgorithmContext must be used within an AlgorithmProvider');
   }
   return context;
 }; 

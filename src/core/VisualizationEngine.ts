@@ -122,19 +122,41 @@ export class VisualizationEngine {
    * Stop the visualization and clear all visualizations
    */
   stop(): void {
+    // Skip if already idle to prevent extra events
+    if (this.animationState === VisualizationState.IDLE) {
+      return;
+    }
+    
     this.clearTimeouts();
     this.clearVisualization();
-    this.reset();
     
-    eventBus.publish(EVENTS.VISUALIZATION_STOPPED, { 
-      state: VisualizationState.IDLE
-    });
+    // Store current state to avoid multiple events
+    const previousState = this.animationState;
+    
+    // Update internal state
+    this.currentVisitedIndex = 0;
+    this.currentShortestPathIndex = 0;
+    this.animationState = VisualizationState.IDLE;
+    
+    // Only publish event if we were previously not in IDLE state
+    if (previousState !== VisualizationState.IDLE) {
+      eventBus.publish(EVENTS.VISUALIZATION_STOPPED, { 
+        state: VisualizationState.IDLE
+      });
+    }
   }
   
   /**
    * Reset the visualization to the beginning
    */
   reset(): void {
+    // Skip if already in IDLE state
+    if (this.animationState === VisualizationState.IDLE &&
+        this.currentVisitedIndex === 0 &&
+        this.currentShortestPathIndex === 0) {
+      return;
+    }
+    
     this.clearTimeouts();
     this.currentVisitedIndex = 0;
     this.currentShortestPathIndex = 0;
@@ -206,7 +228,10 @@ export class VisualizationEngine {
         
         if (element) {
           console.log(`VisualizationEngine: Adding visited class to node-${node.row}-${node.col}`);
+          
+          // Apply the class and also force the element's style directly
           element.classList.add(this.options.visitedClassName!);
+          element.style.backgroundColor = 'rgba(0, 158, 255, 0.8)';
           
           eventBus.publish(EVENTS.VISUALIZATION_STEP, {
             type: 'visited',
@@ -264,7 +289,10 @@ export class VisualizationEngine {
         
         if (element) {
           console.log(`VisualizationEngine: Adding shortest path class to node-${node.row}-${node.col}`);
+          
+          // Apply the class and also force the element's style directly
           element.classList.add(this.options.shortestPathClassName!);
+          element.style.backgroundColor = 'rgba(255, 207, 0, 1)';
           
           eventBus.publish(EVENTS.VISUALIZATION_STEP, {
             type: 'shortest',

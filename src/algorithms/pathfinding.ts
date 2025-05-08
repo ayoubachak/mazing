@@ -11,6 +11,11 @@ const getAllNodes = (grid: GridNode[][]) => {
   return nodes;
 };
 
+// Add a helper function to check if two nodes are at the same position
+const isSamePosition = (nodeA: GridNode, nodeB: GridNode) => {
+  return nodeA.row === nodeB.row && nodeA.col === nodeB.col;
+};
+
 const sortNodesByDistance = (unvisitedNodes: GridNode[]) => {
   unvisitedNodes.sort((nodeA, nodeB) => nodeA.distance - nodeB.distance);
 };
@@ -68,10 +73,36 @@ const getNeighbors = (node: GridNode, grid: GridNode[][]) => {
 const getNodesInShortestPathOrder = (finishNode: GridNode): GridNode[] => {
   const nodesInShortestPathOrder: GridNode[] = [];
   let currentNode: GridNode | null = finishNode;
-  while (currentNode !== null) {
-    nodesInShortestPathOrder.unshift(currentNode);
-    currentNode = currentNode.previousNode;
+  
+  // There's a potential issue where a path is found but the previousNode links weren't set up properly
+  // We'll add extra debugging and error handling
+  if (!currentNode) {
+    console.error("Finish node is null in getNodesInShortestPathOrder");
+    return [];
   }
+  
+  console.log(`Constructing shortest path starting from [${finishNode.row},${finishNode.col}]`);
+  let safetyLimit = 1000; // Prevent infinite loops
+  
+  while (currentNode !== null && safetyLimit > 0) {
+    nodesInShortestPathOrder.unshift(currentNode);
+    
+    // Debug info
+    if (currentNode.previousNode) {
+      console.log(`Node [${currentNode.row},${currentNode.col}] connects to previous node [${currentNode.previousNode.row},${currentNode.previousNode.col}]`);
+    } else if (currentNode !== finishNode) {
+      console.warn(`Node [${currentNode.row},${currentNode.col}] has no previous node reference but is not the start node`);
+    }
+    
+    currentNode = currentNode.previousNode;
+    safetyLimit--;
+  }
+  
+  if (safetyLimit <= 0) {
+    console.error("Potential infinite loop detected in shortest path construction");
+  }
+  
+  console.log(`Found path with ${nodesInShortestPathOrder.length} nodes`);
   return nodesInShortestPathOrder;
 };
 
@@ -86,40 +117,83 @@ export const runDijkstra = (
   finishNode: GridNode, 
   foodNodes: {row: number, col: number}[]
 ) => {
+  console.log('Dijkstra algorithm starting with:', {
+    startNode: `[${startNode.row},${startNode.col}]`,
+    finishNode: `[${finishNode.row},${finishNode.col}]`,
+    foodNodes: foodNodes.length
+  });
+  
+  // Deep clone the grid to avoid side effects
+  const workingGrid = grid.map(row => row.map(node => ({...node})));
+  const workingStartNode = workingGrid[startNode.row][startNode.col];
+  const workingFinishNode = workingGrid[finishNode.row][finishNode.col];
+  
+  // Initialize all nodes in the grid properly
+  for (let row of workingGrid) {
+    for (let node of row) {
+      node.distance = Infinity;
+      node.isVisited = false;
+      node.previousNode = null;
+    }
+  }
+  
+  // Set the distance of the start node to 0
+  workingStartNode.distance = 0;
+  
   const visitedNodesInOrder: GridNode[] = [];
-  startNode.distance = 0;
-  const unvisitedNodes = getAllNodes(grid);
+  const unvisitedNodes = getAllNodes(workingGrid);
   
   // If there are food nodes, handle them first
   let targetNodes = foodNodes.length > 0 
-    ? [...foodNodes.map(food => grid[food.row][food.col]), finishNode]
-    : [finishNode];
+    ? [...foodNodes.map(food => workingGrid[food.row][food.col]), workingFinishNode]
+    : [workingFinishNode];
   
-  let currentStartNode = startNode;
+  console.log('Target nodes:', targetNodes.map(n => `[${n.row},${n.col}]`));
+  
+  let currentStartNode = workingStartNode;
   let allNodesInPath: GridNode[] = [];
   let allVisitedNodes: GridNode[] = [];
   
   // Process each target node
   for (let targetNode of targetNodes) {
+    console.log(`Processing path from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+    
     // Reset distances for each iteration
-    for (let row of grid) {
+    for (let row of workingGrid) {
       for (let node of row) {
-        if (node !== currentStartNode) {
+        if (!isSamePosition(node, currentStartNode)) {
           node.distance = Infinity;
+          node.isVisited = false;
           node.previousNode = null;
         }
       }
     }
     
-    const result = dijkstraHelper(grid, currentStartNode, targetNode, [...unvisitedNodes]);
+    // Make sure the start node's distance is still 0
+    currentStartNode.distance = 0;
+    currentStartNode.isVisited = false;
+    
+    const result = dijkstraHelper(workingGrid, currentStartNode, targetNode, [...unvisitedNodes]);
     
     if (result.nodesInOrder.length === 0) {
-      // Path not found
-      break;
+      console.error(`No path found from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+      continue; // Continue to next target instead of breaking
     }
     
-    allVisitedNodes = [...allVisitedNodes, ...result.nodesInOrder];
-    allNodesInPath = [...allNodesInPath, ...result.pathToTarget];
+    console.log(`Found path with ${result.pathToTarget.length} nodes through ${result.nodesInOrder.length} visited nodes`);
+    
+    // Map the working grid nodes back to the original grid nodes 
+    // to ensure we return nodes from the original grid
+    const mappedVisitedNodes = result.nodesInOrder.map(
+      node => grid[node.row][node.col]
+    );
+    
+    const mappedPathNodes = result.pathToTarget.map(
+      node => grid[node.row][node.col]
+    );
+    
+    allVisitedNodes = [...allVisitedNodes, ...mappedVisitedNodes];
+    allNodesInPath = [...allNodesInPath, ...mappedPathNodes];
     currentStartNode = targetNode;
   }
   
@@ -132,15 +206,31 @@ export const runDijkstra = (
 const dijkstraHelper = (grid: GridNode[][], startNode: GridNode, finishNode: GridNode, unvisitedNodes: GridNode[]) => {
   const visitedNodesInOrder: GridNode[] = [];
   
+  // Reset the unvisitedNodes list to make sure all nodes are included
+  unvisitedNodes = getAllNodes(grid);
+  
+  // Make sure the start node has distance 0
+  for (let node of unvisitedNodes) {
+    if (node.row === startNode.row && node.col === startNode.col) {
+      node.distance = 0;
+    }
+  }
+  
   while (unvisitedNodes.length) {
     sortNodesByDistance(unvisitedNodes);
     const closestNode = unvisitedNodes.shift()!;
+    
+    // Log some debugging info
+    if (unvisitedNodes.length % 100 === 0) {
+      console.log(`Processing node [${closestNode.row},${closestNode.col}] with distance ${closestNode.distance}, ${unvisitedNodes.length} nodes remaining`);
+    }
     
     // If we encounter a wall, skip it
     if (closestNode.isWall) continue;
     
     // If the closest node is at a distance of infinity, we are trapped
     if (closestNode.distance === Infinity) {
+      console.warn('No possible path found - all remaining nodes have infinite distance');
       return { nodesInOrder: visitedNodesInOrder, pathToTarget: [] };
     }
     
@@ -148,7 +238,8 @@ const dijkstraHelper = (grid: GridNode[][], startNode: GridNode, finishNode: Gri
     visitedNodesInOrder.push(closestNode);
     
     // If we've reached the target node, we're done
-    if (closestNode === finishNode) {
+    if (isSamePosition(closestNode, finishNode)) {
+      console.log(`Found path to target node [${finishNode.row},${finishNode.col}]`);
       const nodesInShortestPathOrder = getNodesInShortestPathOrder(finishNode);
       return { nodesInOrder: visitedNodesInOrder, pathToTarget: nodesInShortestPathOrder };
     }
@@ -156,6 +247,7 @@ const dijkstraHelper = (grid: GridNode[][], startNode: GridNode, finishNode: Gri
     updateUnvisitedNeighbors(closestNode, grid);
   }
   
+  console.warn('Exhausted all nodes without finding target');
   return { nodesInOrder: visitedNodesInOrder, pathToTarget: [] };
 };
 
@@ -166,44 +258,84 @@ export const runAStar = (
   finishNode: GridNode, 
   foodNodes: {row: number, col: number}[]
 ) => {
+  console.log('A* algorithm starting with:', {
+    startNode: `[${startNode.row},${startNode.col}]`,
+    finishNode: `[${finishNode.row},${finishNode.col}]`,
+    foodNodes: foodNodes.length
+  });
+  
+  // Deep clone the grid to avoid side effects
+  const workingGrid = grid.map(row => row.map(node => ({...node})));
+  const workingStartNode = workingGrid[startNode.row][startNode.col];
+  const workingFinishNode = workingGrid[finishNode.row][finishNode.col];
+  
+  // Initialize all nodes
+  for (let row of workingGrid) {
+    for (let node of row) {
+      node.distance = Infinity;
+      node.isVisited = false;
+      node.previousNode = null;
+      node.heuristic = calculateManhattanDistance(node, workingFinishNode);
+      node.fScore = Infinity;
+    }
+  }
+  
+  // Set start node values
+  workingStartNode.distance = 0;
+  workingStartNode.fScore = workingStartNode.heuristic;
+  
   const visitedNodesInOrder: GridNode[] = [];
-  startNode.distance = 0;
-  startNode.heuristic = calculateManhattanDistance(startNode, finishNode);
-  startNode.fScore = startNode.distance + startNode.heuristic;
-  const unvisitedNodes = getAllNodes(grid);
+  const unvisitedNodes = getAllNodes(workingGrid);
   
   // If there are food nodes, handle them first
   let targetNodes = foodNodes.length > 0 
-    ? [...foodNodes.map(food => grid[food.row][food.col]), finishNode]
-    : [finishNode];
+    ? [...foodNodes.map(food => workingGrid[food.row][food.col]), workingFinishNode]
+    : [workingFinishNode];
   
-  let currentStartNode = startNode;
+  let currentStartNode = workingStartNode;
   let allNodesInPath: GridNode[] = [];
   let allVisitedNodes: GridNode[] = [];
   
   // Process each target node
   for (let targetNode of targetNodes) {
+    console.log(`Processing path from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+    
     // Reset distances for each iteration
-    for (let row of grid) {
+    for (let row of workingGrid) {
       for (let node of row) {
-        if (node !== currentStartNode) {
+        if (!isSamePosition(node, currentStartNode)) {
           node.distance = Infinity;
+          node.isVisited = false;
+          node.previousNode = null;
           node.heuristic = calculateManhattanDistance(node, targetNode);
           node.fScore = Infinity;
-          node.previousNode = null;
         }
       }
     }
     
-    const result = aStarHelper(grid, currentStartNode, targetNode, [...unvisitedNodes]);
+    // Make sure the start node's distance is still 0
+    currentStartNode.distance = 0;
+    currentStartNode.fScore = currentStartNode.heuristic;
+    currentStartNode.isVisited = false;
+    
+    const result = aStarHelper(workingGrid, currentStartNode, targetNode, [...unvisitedNodes]);
     
     if (result.nodesInOrder.length === 0) {
-      // Path not found
-      break;
+      console.error(`No path found from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+      continue; // Continue to next target instead of breaking
     }
     
-    allVisitedNodes = [...allVisitedNodes, ...result.nodesInOrder];
-    allNodesInPath = [...allNodesInPath, ...result.pathToTarget];
+    // Map the working grid nodes back to the original grid nodes
+    const mappedVisitedNodes = result.nodesInOrder.map(
+      node => grid[node.row][node.col]
+    );
+    
+    const mappedPathNodes = result.pathToTarget.map(
+      node => grid[node.row][node.col]
+    );
+    
+    allVisitedNodes = [...allVisitedNodes, ...mappedVisitedNodes];
+    allNodesInPath = [...allNodesInPath, ...mappedPathNodes];
     currentStartNode = targetNode;
   }
   
@@ -215,6 +347,17 @@ export const runAStar = (
 
 const aStarHelper = (grid: GridNode[][], startNode: GridNode, finishNode: GridNode, unvisitedNodes: GridNode[]) => {
   const visitedNodesInOrder: GridNode[] = [];
+  
+  // Reset the unvisitedNodes list
+  unvisitedNodes = getAllNodes(grid);
+  
+  // Set start node distance to 0
+  for (let node of unvisitedNodes) {
+    if (node.row === startNode.row && node.col === startNode.col) {
+      node.distance = 0;
+      node.fScore = node.heuristic; // Initial fScore is just the heuristic
+    }
+  }
   
   while (unvisitedNodes.length) {
     sortNodesByFScore(unvisitedNodes);
@@ -232,7 +375,7 @@ const aStarHelper = (grid: GridNode[][], startNode: GridNode, finishNode: GridNo
     visitedNodesInOrder.push(closestNode);
     
     // If we've reached the target node, we're done
-    if (closestNode === finishNode) {
+    if (isSamePosition(closestNode, finishNode)) {
       const nodesInShortestPathOrder = getNodesInShortestPathOrder(finishNode);
       return { nodesInOrder: visitedNodesInOrder, pathToTarget: nodesInShortestPathOrder };
     }
@@ -250,25 +393,49 @@ export const runBFS = (
   finishNode: GridNode, 
   foodNodes: {row: number, col: number}[]
 ) => {
+  console.log('BFS algorithm starting with:', {
+    startNode: `[${startNode.row},${startNode.col}]`,
+    finishNode: `[${finishNode.row},${finishNode.col}]`,
+    foodNodes: foodNodes.length
+  });
+  
+  // Deep clone the grid to avoid side effects
+  const workingGrid = grid.map(row => row.map(node => ({...node})));
+  const workingStartNode = workingGrid[startNode.row][startNode.col];
+  const workingFinishNode = workingGrid[finishNode.row][finishNode.col];
+  
+  // Initialize all nodes
+  for (let row of workingGrid) {
+    for (let node of row) {
+      node.distance = Infinity;
+      node.isVisited = false;
+      node.previousNode = null;
+    }
+  }
+  
+  // Set start node values
+  workingStartNode.distance = 0;
+  workingStartNode.isVisited = true;
+  
   const visitedNodesInOrder: GridNode[] = [];
-  startNode.distance = 0;
-  startNode.isVisited = true;
   
   // If there are food nodes, handle them first
   let targetNodes = foodNodes.length > 0 
-    ? [...foodNodes.map(food => grid[food.row][food.col]), finishNode]
-    : [finishNode];
+    ? [...foodNodes.map(food => workingGrid[food.row][food.col]), workingFinishNode]
+    : [workingFinishNode];
   
-  let currentStartNode = startNode;
+  let currentStartNode = workingStartNode;
   let allNodesInPath: GridNode[] = [];
   let allVisitedNodes: GridNode[] = [];
   
   // Process each target node
   for (let targetNode of targetNodes) {
+    console.log(`Processing path from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+    
     // Reset for each iteration
-    for (let row of grid) {
+    for (let row of workingGrid) {
       for (let node of row) {
-        if (node !== currentStartNode) {
+        if (!isSamePosition(node, currentStartNode)) {
           node.distance = Infinity;
           node.isVisited = false;
           node.previousNode = null;
@@ -276,15 +443,28 @@ export const runBFS = (
       }
     }
     
-    const result = bfsHelper(grid, currentStartNode, targetNode);
+    // Make sure the start node is properly initialized
+    currentStartNode.distance = 0;
+    currentStartNode.isVisited = true;
+    
+    const result = bfsHelper(workingGrid, currentStartNode, targetNode);
     
     if (result.nodesInOrder.length === 0) {
-      // Path not found
-      break;
+      console.error(`No path found from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+      continue; // Continue to next target instead of breaking
     }
     
-    allVisitedNodes = [...allVisitedNodes, ...result.nodesInOrder];
-    allNodesInPath = [...allNodesInPath, ...result.pathToTarget];
+    // Map the working grid nodes back to the original grid nodes
+    const mappedVisitedNodes = result.nodesInOrder.map(
+      node => grid[node.row][node.col]
+    );
+    
+    const mappedPathNodes = result.pathToTarget.map(
+      node => grid[node.row][node.col]
+    );
+    
+    allVisitedNodes = [...allVisitedNodes, ...mappedVisitedNodes];
+    allNodesInPath = [...allNodesInPath, ...mappedPathNodes];
     currentStartNode = targetNode;
   }
   
@@ -303,7 +483,7 @@ const bfsHelper = (grid: GridNode[][], startNode: GridNode, finishNode: GridNode
     const currentNode = queue.shift()!;
     visitedNodesInOrder.push(currentNode);
     
-    if (currentNode === finishNode) {
+    if (isSamePosition(currentNode, finishNode)) {
       return { 
         nodesInOrder: visitedNodesInOrder, 
         pathToTarget: getNodesInShortestPathOrder(finishNode) 
@@ -330,25 +510,49 @@ export const runDFS = (
   finishNode: GridNode, 
   foodNodes: {row: number, col: number}[]
 ) => {
+  console.log('DFS algorithm starting with:', {
+    startNode: `[${startNode.row},${startNode.col}]`,
+    finishNode: `[${finishNode.row},${finishNode.col}]`,
+    foodNodes: foodNodes.length
+  });
+  
+  // Deep clone the grid to avoid side effects
+  const workingGrid = grid.map(row => row.map(node => ({...node})));
+  const workingStartNode = workingGrid[startNode.row][startNode.col];
+  const workingFinishNode = workingGrid[finishNode.row][finishNode.col];
+  
+  // Initialize all nodes
+  for (let row of workingGrid) {
+    for (let node of row) {
+      node.distance = Infinity;
+      node.isVisited = false;
+      node.previousNode = null;
+    }
+  }
+  
+  // Set start node values
+  workingStartNode.distance = 0;
+  workingStartNode.isVisited = true;
+  
   const visitedNodesInOrder: GridNode[] = [];
-  startNode.distance = 0;
-  startNode.isVisited = true;
   
   // If there are food nodes, handle them first
   let targetNodes = foodNodes.length > 0 
-    ? [...foodNodes.map(food => grid[food.row][food.col]), finishNode]
-    : [finishNode];
+    ? [...foodNodes.map(food => workingGrid[food.row][food.col]), workingFinishNode]
+    : [workingFinishNode];
   
-  let currentStartNode = startNode;
+  let currentStartNode = workingStartNode;
   let allNodesInPath: GridNode[] = [];
   let allVisitedNodes: GridNode[] = [];
   
   // Process each target node
   for (let targetNode of targetNodes) {
+    console.log(`Processing path from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+    
     // Reset for each iteration
-    for (let row of grid) {
+    for (let row of workingGrid) {
       for (let node of row) {
-        if (node !== currentStartNode) {
+        if (!isSamePosition(node, currentStartNode)) {
           node.distance = Infinity;
           node.isVisited = false;
           node.previousNode = null;
@@ -356,15 +560,28 @@ export const runDFS = (
       }
     }
     
-    const result = dfsHelper(grid, currentStartNode, targetNode);
+    // Make sure the start node is properly initialized
+    currentStartNode.distance = 0;
+    currentStartNode.isVisited = true;
+    
+    const result = dfsHelper(workingGrid, currentStartNode, targetNode);
     
     if (result.nodesInOrder.length === 0) {
-      // Path not found
-      break;
+      console.error(`No path found from [${currentStartNode.row},${currentStartNode.col}] to [${targetNode.row},${targetNode.col}]`);
+      continue; // Continue to next target instead of breaking
     }
     
-    allVisitedNodes = [...allVisitedNodes, ...result.nodesInOrder];
-    allNodesInPath = [...allNodesInPath, ...result.pathToTarget];
+    // Map the working grid nodes back to the original grid nodes
+    const mappedVisitedNodes = result.nodesInOrder.map(
+      node => grid[node.row][node.col]
+    );
+    
+    const mappedPathNodes = result.pathToTarget.map(
+      node => grid[node.row][node.col]
+    );
+    
+    allVisitedNodes = [...allVisitedNodes, ...mappedVisitedNodes];
+    allNodesInPath = [...allNodesInPath, ...mappedPathNodes];
     currentStartNode = targetNode;
   }
   
@@ -383,7 +600,7 @@ const dfsHelper = (grid: GridNode[][], startNode: GridNode, finishNode: GridNode
     const currentNode = stack.pop()!;
     visitedNodesInOrder.push(currentNode);
     
-    if (currentNode === finishNode) {
+    if (isSamePosition(currentNode, finishNode)) {
       return { 
         nodesInOrder: visitedNodesInOrder, 
         pathToTarget: getNodesInShortestPathOrder(finishNode) 

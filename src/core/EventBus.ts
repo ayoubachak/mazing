@@ -9,6 +9,9 @@ export type EventCallback = (data: any) => void;
 
 class EventBus {
   private events: Record<string, EventCallback[]> = {};
+  private eventStack: string[] = []; // Track event call stack to detect circular dependencies
+  private isDispatching: boolean = false;
+  private maxStackDepth: number = 10; // Limit the depth of event propagation
   
   /**
    * Subscribe to an event
@@ -35,15 +38,54 @@ class EventBus {
    * 
    * @param eventName The name of the event to publish
    * @param data Data to pass to the subscribers
+   * @returns True if event was successfully published
    */
-  publish(eventName: string, data: any = {}): void {
+  publish(eventName: string, data: any = {}): boolean {
     if (!this.events[eventName]) {
-      return;
+      return false;
     }
     
-    this.events[eventName].forEach(callback => {
-      callback(data);
-    });
+    // Prevent circular event dependencies
+    if (this.eventStack.includes(eventName)) {
+      console.warn(`Circular event dependency detected for event: ${eventName}. Event stack:`, [...this.eventStack]);
+      return false;
+    }
+    
+    // Check stack depth to prevent infinite loops
+    if (this.eventStack.length >= this.maxStackDepth) {
+      console.error(`Maximum event stack depth reached. Stopping event propagation to prevent infinite loops. Current stack:`, [...this.eventStack]);
+      return false;
+    }
+    
+    try {
+      // Track that we're entering this event
+      this.eventStack.push(eventName);
+      
+      // Set flag to indicate we're dispatching events
+      const wasDispatching = this.isDispatching;
+      this.isDispatching = true;
+      
+      this.events[eventName].forEach(callback => {
+        callback(data);
+      });
+      
+      // Reset dispatching flag only if we're the outermost dispatch call
+      if (!wasDispatching) {
+        this.isDispatching = false;
+      }
+      
+      return true;
+    } finally {
+      // Always make sure to pop the event from the stack
+      if (this.eventStack[this.eventStack.length - 1] === eventName) {
+        this.eventStack.pop();
+      }
+      
+      // If we've processed all events, clear the stack completely
+      if (this.eventStack.length === 0) {
+        this.isDispatching = false;
+      }
+    }
   }
   
   /**
@@ -60,6 +102,8 @@ class EventBus {
    */
   clearAll(): void {
     this.events = {};
+    this.eventStack = [];
+    this.isDispatching = false;
   }
 }
 
@@ -89,9 +133,14 @@ export const EVENTS = {
   TOOL_CHANGED: 'interaction:toolChanged',
   NODE_CLICKED: 'interaction:nodeClicked',
   NODE_DRAGGED: 'interaction:nodeDragged',
+  NODE_MOVED: 'interaction:nodeMoved',
   
   // UI events
   ANIMATION_SPEED_CHANGED: 'ui:animationSpeedChanged',
   ALGORITHM_CHANGED: 'ui:algorithmChanged',
   MAZE_GENERATION_REQUESTED: 'ui:mazeGenerationRequested',
+  
+  // Path events
+  RECALCULATE_PATH_REQUESTED: 'path:recalculateRequested',
+  PATH_UPDATED: 'path:updated'
 }; 

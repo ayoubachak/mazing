@@ -1,15 +1,15 @@
 import { useEffect } from 'react';
-import { useInteraction, ToolType } from '../state/InteractionContext';
-import { useGrid } from '../state/GridContext';
-import { useAlgorithm } from '../state/AlgorithmContext';
-import { useVisualization } from '../state/VisualizationContext';
+import { useInteractionContext, ToolType } from '../state/InteractionContext';
+import { useGridContext } from '../state/GridContext';
+import { useAlgorithmContext } from '../state/AlgorithmContext';
+import { useVisualizationContext } from '../state/VisualizationContext';
 import { VisualizationState } from '../core/VisualizationEngine';
 
 export const useKeyboardShortcuts = () => {
-  const { setTool, resetView } = useInteraction();
-  const { clearPath, clearWallsAndWeights, clearBoard } = useGrid();
-  const { runAlgorithm, stopAlgorithm } = useAlgorithm();
-  const { visualizationState, clearVisualization } = useVisualization();
+  const { setTool, resetView } = useInteractionContext();
+  const { clearPath, clearWallsAndWeights, clearBoard } = useGridContext();
+  const { runSelectedAlgorithm } = useAlgorithmContext();
+  const { visualizationState, resetVisualization } = useVisualizationContext();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -43,16 +43,13 @@ export const useKeyboardShortcuts = () => {
         case ' ': // Space bar
           e.preventDefault(); // Prevent page scroll
           if (visualizationState === VisualizationState.RUNNING) {
-            stopAlgorithm();
-            clearVisualization();
+            resetVisualization();
           } else {
-            clearPath();
-            runAlgorithm();
+            runSelectedAlgorithm();
           }
           break;
         case 'escape':
-          stopAlgorithm();
-          clearVisualization();
+          resetVisualization();
           break;
         case 'c':
           if (e.ctrlKey || e.metaKey) {
@@ -90,9 +87,8 @@ export const useKeyboardShortcuts = () => {
     clearPath, 
     clearWallsAndWeights, 
     clearBoard, 
-    runAlgorithm, 
-    stopAlgorithm, 
-    clearVisualization, 
+    runSelectedAlgorithm, 
+    resetVisualization, 
     visualizationState
   ]);
 }; 

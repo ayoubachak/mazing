@@ -1,9 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
-import { 
-  ChevronDown, Zap, Play, Pause, RefreshCw, Grid, Map, 
-  Edit, Square, Target, Circle, ArrowRight, Hash, Weight, 
-  Menu, X, Home, AlertTriangle, Info 
-} from 'lucide-react';
+import { Play, Pause, Menu, X, AlertTriangle } from 'lucide-react';
 import type { GridNode } from './types';
 import { 
   runDijkstra, 
@@ -23,8 +19,8 @@ export default function MazeVisualizer() {
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
   // Grid Configuration
-  const [rows, setRows] = useState(25);
-  const [cols, setCols] = useState(40);
+  const rows = 25;
+  const cols = 40;
   const [isMousePressed, setIsMousePressed] = useState(false);
   const [currentTool, setCurrentTool] = useState('wall');
   const [startNode, setStartNode] = useState({ row: 10, col: 10 });
@@ -35,10 +31,14 @@ export default function MazeVisualizer() {
   const [isDraggingStart, setIsDraggingStart] = useState(false);
   const [isDraggingFinish, setIsDraggingFinish] = useState(false);
   const [foodNodes, setFoodNodes] = useState<{row: number, col: number}[]>([]);
-  const [currentMaze, setCurrentMaze] = useState('none');
   const [isMenuOpen, setIsMenuOpen] = useState(true);
   const [showInstructions, setShowInstructions] = useState(true);
   const [viewportPosition, setViewportPosition] = useState({ x: 0, y: 0 });
+  const [isGrabbing, setIsGrabbing] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipContent, setTooltipContent] = useState('');
   const [isGrabbing, setIsGrabbing] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
   const [zoomLevel, setZoomLevel] = useState(1);

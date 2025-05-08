@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
-import { useGrid } from '../../state/GridContext';
-import { useInteraction } from '../../state/InteractionContext';
+import { useGridContext } from '../../state/GridContext';
+import { useInteractionContext } from '../../state/InteractionContext';
 import Node from '../nodes/Node';
 
 interface GridProps {
@@ -12,7 +12,7 @@ const Grid: React.FC<GridProps> = ({
   nodeSize = 24, 
   gap = 1 
 }) => {
-  const { grid, rows, cols } = useGrid();
+  const { grid, rows, cols } = useGridContext();
   const { 
     handlePanStart, 
     handlePanMove, 
@@ -22,7 +22,7 @@ const Grid: React.FC<GridProps> = ({
     isPanning, 
     zoomLevel, 
     panOffset 
-  } = useInteraction();
+  } = useInteractionContext();
   
   const gridRef = useRef<HTMLDivElement>(null);
   

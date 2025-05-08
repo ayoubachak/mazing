@@ -1,11 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   VisualizationEngine, 
   VisualizationState, 
   AnimationSpeed 
 } from '../core/VisualizationEngine';
 import type { GridNode } from '../core/GridModel';
-import type { AlgorithmResult } from '../core/AlgorithmEngine';
 import { eventBus, EVENTS } from '../core/EventBus';
 
 // Context interface
@@ -22,10 +21,10 @@ interface VisualizationContextValue {
   
   // Visualization actions
   setSpeed: (speed: AnimationSpeed) => void;
-  visualize: (result: AlgorithmResult) => void;
+  startVisualization: (visitedNodesInOrder: GridNode[], nodesInShortestPathOrder: GridNode[]) => void;
   pauseVisualization: () => void;
   stopVisualization: () => void;
-  clearVisualization: () => void;
+  resetVisualization: () => void;
   
   // Visualization engine reference
   visualizationEngine: VisualizationEngine;
@@ -50,6 +49,14 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
     shortestPathProgress: 0,
     shortestPathTotal: 0
   });
+  
+  // Create a ref to track current visualization state without causing re-renders
+  const visualizationStateRef = useRef(visualizationState);
+  
+  // Update ref when state changes
+  useEffect(() => {
+    visualizationStateRef.current = visualizationState;
+  }, [visualizationState]);
   
   // Subscribe to visualization events from the event bus
   useEffect(() => {
@@ -96,13 +103,26 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     });
     
+    // Subscribe to node movement events to update visualization
+    const nodeMovedUnsubscribe = eventBus.subscribe(EVENTS.NODE_MOVED, () => {
+      // Use the ref to check the current state instead of depending on visualizationState
+      const currentState = visualizationStateRef.current;
+      
+      // Only update visualization if it's completed or idle
+      if (currentState === VisualizationState.COMPLETED ||
+          currentState === VisualizationState.IDLE) {
+        eventBus.publish(EVENTS.RECALCULATE_PATH_REQUESTED);
+      }
+    });
+    
     return () => {
       startedUnsubscribe();
       stoppedUnsubscribe();
       completedUnsubscribe();
       stepUnsubscribe();
+      nodeMovedUnsubscribe();
     };
-  }, []);
+  }, []); // Remove visualizationState from dependencies
   
   // Set animation speed
   const setSpeed = (newSpeed: AnimationSpeed) => {
@@ -112,19 +132,30 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   };
   
   // Start visualization with algorithm results
-  const visualize = (result: AlgorithmResult) => {
-    visualizationEngine.setAlgorithmResults(
-      result.visitedNodesInOrder, 
-      result.nodesInShortestPathOrder
-    );
+  const startVisualization = useCallback((visitedNodesInOrder: GridNode[], nodesInShortestPathOrder: GridNode[]) => {
+    // Don't call resetVisualization() here as it can trigger state updates that cause re-renders
+    // Instead, directly control the visualization engine
+    
+    // Stop any current visualization
+    visualizationEngine.stop();
+    visualizationEngine.clearVisualization();
+    
+    // Set algorithm results and prepare for animation
+    visualizationEngine.setAlgorithmResults(visitedNodesInOrder, nodesInShortestPathOrder);
+    
+    // Update progress state in one batch to reduce renders
     setProgress({
       visitedProgress: 0,
-      visitedTotal: result.visitedNodesInOrder.length,
+      visitedTotal: visitedNodesInOrder.length,
       shortestPathProgress: 0,
-      shortestPathTotal: result.nodesInShortestPathOrder.length
+      shortestPathTotal: nodesInShortestPathOrder.length
     });
-    visualizationEngine.start();
-  };
+    
+    // Make sure state is updated before starting animation
+    setTimeout(() => {
+      visualizationEngine.start();
+    }, 50);
+  }, [visualizationEngine]);
   
   // Pause the visualization
   const pauseVisualization = () => {
@@ -132,21 +163,35 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   };
   
   // Stop the visualization
-  const stopVisualization = () => {
+  const stopVisualization = useCallback(() => {
+    // Check if we're already stopped to prevent unnecessary event cycles
+    if (visualizationState === VisualizationState.IDLE) {
+      return;
+    }
+    
     visualizationEngine.stop();
-  };
+  }, [visualizationEngine, visualizationState]);
   
-  // Clear the visualization
-  const clearVisualization = () => {
+  // Reset the visualization state
+  const resetVisualization = useCallback(() => {
+    // Check if we're already in IDLE state to prevent unnecessary state updates
+    if (visualizationState === VisualizationState.IDLE) {
+      return;
+    }
+    
+    stopVisualization();
     visualizationEngine.clearVisualization();
+    visualizationEngine.reset();
+    
     setProgress({
       visitedProgress: 0,
       visitedTotal: 0,
       shortestPathProgress: 0,
       shortestPathTotal: 0
     });
+    
     setVisualizationState(VisualizationState.IDLE);
-  };
+  }, [visualizationEngine, stopVisualization, visualizationState]);
   
   // Create context value
   const contextValue: VisualizationContextValue = {
@@ -154,10 +199,10 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
     speed,
     progress,
     setSpeed,
-    visualize,
+    startVisualization,
     pauseVisualization,
     stopVisualization,
-    clearVisualization,
+    resetVisualization,
     visualizationEngine
   };
   
@@ -169,10 +214,10 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
 };
 
 // Custom hook for using the visualization context
-export const useVisualization = (): VisualizationContextValue => {
+export const useVisualizationContext = () => {
   const context = useContext(VisualizationContext);
   if (context === undefined) {
-    throw new Error('useVisualization must be used within a VisualizationProvider');
+    throw new Error('useVisualizationContext must be used within a VisualizationProvider');
   }
   return context;
 }; 

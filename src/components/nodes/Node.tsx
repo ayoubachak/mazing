@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Home, Target, Circle, Weight } from 'lucide-react';
 import type { GridNode } from '../../core/GridModel';
-import { useInteraction } from '../../state/InteractionContext';
+import { useInteractionContext } from '../../state/InteractionContext';
 
 interface NodeProps {
   node: GridNode;
@@ -13,7 +13,7 @@ const Node: React.FC<NodeProps> = ({ node, size = 24 }) => {
     handleNodeMouseDown,
     handleNodeMouseEnter,
     handleNodeMouseUp
-  } = useInteraction();
+  } = useInteractionContext();
   
   const {
     row,

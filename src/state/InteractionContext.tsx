@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useGrid } from './GridContext';
+import { useGridContext } from './GridContext';
 import { eventBus, EVENTS } from '../core/EventBus';
 
 // Tool types
@@ -61,7 +61,7 @@ export const InteractionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     startNode,
     finishNode,
     grid
-  } = useGrid();
+  } = useGridContext();
   
   // React state for interaction
   const [currentTool, setCurrentTool] = useState<ToolType>(ToolType.WALL);
@@ -248,10 +248,10 @@ export const InteractionProvider: React.FC<{ children: React.ReactNode }> = ({ c
 };
 
 // Custom hook for using the interaction context
-export const useInteraction = (): InteractionContextValue => {
+export const useInteractionContext = (): InteractionContextValue => {
   const context = useContext(InteractionContext);
   if (context === undefined) {
-    throw new Error('useInteraction must be used within an InteractionProvider');
+    throw new Error('useInteractionContext must be used within an InteractionProvider');
   }
   return context;
 }; 

@@ -30,11 +30,13 @@ body {
 /* Animation for visited nodes */
 .node-visited {
   animation: visitedAnimation 0.5s ease-out forwards !important;
+  background-color: rgba(0, 158, 255, 0.8) !important;
 }
 
 /* Animation for shortest path nodes */
 .node-shortest-path {
   animation: shortestPathAnimation 0.5s ease-out forwards !important;
+  background-color: rgba(255, 207, 0, 1) !important;
 }
 
 /* Animation keyframes for visited nodes */
@@ -95,7 +97,7 @@ body {
   background-color: rgba(255, 207, 0, 1) !important;
 }
 
-/* Override for special nodes */
+/* Override for special nodes - preserve the identity of special nodes during animation */
 .node.bg-gradient-to-br.node-visited,
 .node.bg-gradient-to-br.node-shortest-path {
   background-image: none !important;

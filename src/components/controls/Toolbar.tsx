@@ -4,42 +4,43 @@ import {
   Map, Edit, Square, Target, Circle, ArrowRight, 
   Weight, X, Home
 } from 'lucide-react';
-import { useAlgorithm, AlgorithmType } from '../../state/AlgorithmContext';
-import { useVisualization } from '../../state/VisualizationContext';
+import { useAlgorithmContext } from '../../state/AlgorithmContext';
+import { useVisualizationContext } from '../../state/VisualizationContext';
 import { AnimationSpeed, VisualizationState } from '../../core/VisualizationEngine';
-import { useGrid } from '../../state/GridContext';
-import { useInteraction, ToolType } from '../../state/InteractionContext';
+import { useGridContext } from '../../state/GridContext';
+import { useInteractionContext, ToolType } from '../../state/InteractionContext';
 
 const Toolbar: React.FC = () => {
   const { 
-    selectedAlgorithm, 
+    algorithm, 
     setAlgorithm, 
-    runAlgorithm, 
-    stopAlgorithm,
-    isRunning 
-  } = useAlgorithm();
+    runSelectedAlgorithm, 
+    isCalculating 
+  } = useAlgorithmContext();
   
   const { 
     visualizationState, 
     speed, 
     setSpeed,
     pauseVisualization,
-    clearVisualization
-  } = useVisualization();
+    stopVisualization,
+    resetVisualization
+  } = useVisualizationContext();
   
   const { 
     clearWallsAndWeights, 
     clearPath, 
-    clearBoard
-  } = useGrid();
+    clearBoard,
+    gridModel
+  } = useGridContext();
   
-  const { currentTool, setTool, resetView } = useInteraction();
+  const { currentTool, setTool, resetView } = useInteractionContext();
   
   const algorithmNames = {
-    [AlgorithmType.DIJKSTRA]: "Dijkstra's Algorithm",
-    [AlgorithmType.A_STAR]: "A* Search",
-    [AlgorithmType.BFS]: "Breadth-First Search",
-    [AlgorithmType.DFS]: "Depth-First Search"
+    'dijkstra': "Dijkstra's Algorithm",
+    'astar': "A* Search",
+    'bfs': "Breadth-First Search",
+    'dfs': "Depth-First Search"
   };
 
   // Speed options for visualization
@@ -58,12 +59,16 @@ const Toolbar: React.FC = () => {
       visualizationState === VisualizationState.PAUSED
     ) {
       console.log('Toolbar: Stopping algorithm');
-      stopAlgorithm();
-      clearVisualization();
+      stopVisualization();
+      resetVisualization();
     } else {
-      console.log('Toolbar: Running algorithm:', selectedAlgorithm);
+      console.log('Toolbar: Running algorithm:', algorithm);
       clearPath();
-      runAlgorithm();
+      
+      // Execute with small timeout to ensure UI updates first
+      setTimeout(() => {
+        runSelectedAlgorithm();
+      }, 50);
     }
   };
   
@@ -72,7 +77,7 @@ const Toolbar: React.FC = () => {
     if (visualizationState === VisualizationState.RUNNING) {
       pauseVisualization();
     } else if (visualizationState === VisualizationState.PAUSED) {
-      runAlgorithm();
+      runSelectedAlgorithm();
     }
   };
   
@@ -81,16 +86,16 @@ const Toolbar: React.FC = () => {
       {/* Algorithm Selection */}
       <div className="dropdown relative inline-block">
         <button className="bg-white border border-gray-300 px-4 py-2 rounded-md text-sm flex items-center gap-1 hover:bg-gray-50">
-          {algorithmNames[selectedAlgorithm]} <ChevronDown size={16} />
+          {algorithmNames[algorithm] || 'Select Algorithm'} <ChevronDown size={16} />
         </button>
         <div className="dropdown-content absolute hidden bg-white border border-gray-200 mt-1 p-1 rounded-md z-10 shadow-lg">
           {Object.entries(algorithmNames).map(([type, name]) => (
             <button
               key={type}
               className={`block px-4 py-2 text-sm rounded hover:bg-gray-100 w-full text-left ${
-                selectedAlgorithm === type ? 'bg-gray-100' : ''
+                algorithm === type ? 'bg-gray-100' : ''
               }`}
-              onClick={() => setAlgorithm(type as AlgorithmType)}
+              onClick={() => setAlgorithm(type)}
             >
               {name}
             </button>
@@ -107,6 +112,7 @@ const Toolbar: React.FC = () => {
               : 'bg-purple-600 hover:bg-purple-700 text-white'
           }`}
           onClick={handleVisualize}
+          disabled={isCalculating}
         >
           {visualizationState === VisualizationState.RUNNING ? (
             <>
@@ -234,20 +240,6 @@ const Toolbar: React.FC = () => {
           title="Clear Board"
         >
           <RefreshCw size={18} />
-        </button>
-        <button
-          className="p-2 rounded-md hover:bg-gray-100 bg-yellow-100"
-          onClick={() => gridModel.createTestPattern()}
-          title="Create Test Pattern (Debug)"
-        >
-          <Grid size={18} />
-        </button>
-        <button
-          className="p-2 rounded-md hover:bg-gray-100 bg-yellow-100"
-          onClick={() => visualizationEngine.testAnimation()}
-          title="Test Animations (Debug)"
-        >
-          <Map size={18} />
         </button>
         <button
           className="p-2 rounded-md hover:bg-gray-100"

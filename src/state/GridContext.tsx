@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { GridModel } from '../core/GridModel';
 import type { GridNode, NodePosition } from '../core/GridModel';
 import { eventBus, EVENTS } from '../core/EventBus';
@@ -57,6 +57,9 @@ export const GridProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [finishNode, setFinishNodeState] = useState<NodePosition>(INITIAL_FINISH_NODE);
   const [foodNodes, setFoodNodes] = useState<NodePosition[]>([]);
   
+  // Use a ref to track the debounce timer
+  const recalculationTimerRef = useRef<number | null>(null);
+  
   // Subscribe to grid changes from the event bus
   useEffect(() => {
     const gridInitializedUnsubscribe = eventBus.subscribe(EVENTS.GRID_INITIALIZED, (data) => {
@@ -71,32 +74,137 @@ export const GridProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setFoodNodes([...gridModel.getFoodNodes()]);
     });
     
+    // Subscribe to path recalculation requests
+    const recalculateUnsubscribe = eventBus.subscribe(EVENTS.RECALCULATE_PATH_REQUESTED, () => {
+      // Clear any existing timer
+      if (recalculationTimerRef.current !== null) {
+        window.clearTimeout(recalculationTimerRef.current);
+      }
+      
+      // Debounce the path recalculation to prevent rapid firing
+      recalculationTimerRef.current = window.setTimeout(() => {
+        // Trigger path recalculation based on current grid state
+        eventBus.publish(EVENTS.PATH_UPDATED, {
+          grid: gridModel.getGrid(),
+          startNode: gridModel.getStartNode(),
+          finishNode: gridModel.getFinishNode(),
+          foodNodes: gridModel.getFoodNodes()
+        });
+        
+        recalculationTimerRef.current = null;
+      }, 200); // 200ms debounce
+    });
+    
     return () => {
       gridInitializedUnsubscribe();
       nodeChangedUnsubscribe();
+      recalculateUnsubscribe();
+      
+      // Clean up any pending timer
+      if (recalculationTimerRef.current !== null) {
+        window.clearTimeout(recalculationTimerRef.current);
+      }
     };
   }, [gridModel]);
   
   // Grid actions
   const setStartNode = (row: number, col: number) => {
+    // Skip if coordinates are out of bounds
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    // Skip if trying to place at the finish node position
+    if (row === finishNode.row && col === finishNode.col) return;
+    
+    // Skip if trying to place on a wall
+    if (grid[row][col].isWall) return;
+    
+    // Skip if position hasn't changed
+    if (row === startNode.row && col === startNode.col) return;
+    
+    const oldStartNode = {...startNode};
     gridModel.setStartNode(row, col);
-    setStartNodeState(gridModel.getStartNode());
+    const newStartNode = gridModel.getStartNode();
+    setStartNodeState(newStartNode);
+    
+    // Emit node moved event to trigger algorithm recalculation
+    eventBus.publish(EVENTS.NODE_MOVED, {
+      type: 'start',
+      from: oldStartNode,
+      to: newStartNode
+    });
   };
   
   const setFinishNode = (row: number, col: number) => {
+    // Skip if coordinates are out of bounds
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    // Skip if trying to place at the start node position
+    if (row === startNode.row && col === startNode.col) return;
+    
+    // Skip if trying to place on a wall
+    if (grid[row][col].isWall) return;
+    
+    // Skip if position hasn't changed
+    if (row === finishNode.row && col === finishNode.col) return;
+    
+    const oldFinishNode = {...finishNode};
     gridModel.setFinishNode(row, col);
-    setFinishNodeState(gridModel.getFinishNode());
+    const newFinishNode = gridModel.getFinishNode();
+    setFinishNodeState(newFinishNode);
+    
+    // Emit node moved event to trigger algorithm recalculation
+    eventBus.publish(EVENTS.NODE_MOVED, {
+      type: 'finish',
+      from: oldFinishNode,
+      to: newFinishNode
+    });
   };
   
   const toggleWall = (row: number, col: number) => {
+    // Skip if coordinates are out of bounds
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    // Skip if trying to toggle wall on start or finish nodes
+    if ((row === startNode.row && col === startNode.col) || 
+        (row === finishNode.row && col === finishNode.col)) {
+      return;
+    }
+    
     gridModel.toggleWall(row, col);
   };
   
   const toggleFood = (row: number, col: number) => {
+    // Skip if coordinates are out of bounds
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    // Skip if trying to toggle food on start, finish, or wall nodes
+    if ((row === startNode.row && col === startNode.col) || 
+        (row === finishNode.row && col === finishNode.col) ||
+        grid[row][col].isWall) {
+      return;
+    }
+    
     gridModel.toggleFood(row, col);
+    
+    // After toggling food, emit node moved event to trigger recalculation
+    eventBus.publish(EVENTS.NODE_MOVED, {
+      type: 'food',
+      foodNodes: gridModel.getFoodNodes()
+    });
   };
   
   const toggleWeight = (row: number, col: number) => {
+    // Skip if coordinates are out of bounds
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+    
+    // Skip if trying to toggle weight on start, finish, wall, or food nodes
+    if ((row === startNode.row && col === startNode.col) || 
+        (row === finishNode.row && col === finishNode.col) ||
+        grid[row][col].isWall ||
+        grid[row][col].isFood) {
+      return;
+    }
+    
     gridModel.toggleWeight(row, col);
   };
   
@@ -150,10 +258,10 @@ export const GridProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 // Custom hook for using the grid context
-export const useGrid = (): GridContextValue => {
+export const useGridContext = (): GridContextValue => {
   const context = useContext(GridContext);
   if (context === undefined) {
-    throw new Error('useGrid must be used within a GridProvider');
+    throw new Error('useGridContext must be used within a GridProvider');
   }
   return context;
 }; 
