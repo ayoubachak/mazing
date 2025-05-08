@@ -39,11 +39,6 @@ export default function MazeVisualizer() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipContent, setTooltipContent] = useState('');
-  const [isGrabbing, setIsGrabbing] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipContent, setTooltipContent] = useState('');
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -52,7 +47,6 @@ export default function MazeVisualizer() {
     grid,
     setGrid,
     initializeGrid,
-    createNode,
     updateNodeInGrid,
     clearBoard: clearBoardOperation,
     clearWallsAndWeights: clearWallsAndWeightsOperation,
@@ -82,6 +76,11 @@ export default function MazeVisualizer() {
   const clearBoard = () => {
     setFoodNodes([]);
     clearBoardOperation();
+    // also clear any existing path classes
+    document.querySelectorAll('.node-visited, .node-shortest-path').forEach(el => {
+      el.classList.remove('node-visited', 'node-shortest-path');
+      (el as HTMLElement).style.backgroundColor = '';
+    });
   };
 
   const clearWallsAndWeights = () => {
@@ -90,6 +89,11 @@ export default function MazeVisualizer() {
 
   const clearPath = () => {
     clearPathOperation();
+    // remove any animated path classes
+    document.querySelectorAll('.node-visited, .node-shortest-path').forEach(el => {
+      el.classList.remove('node-visited', 'node-shortest-path');
+      (el as HTMLElement).style.backgroundColor = '';
+    });
   };
 
   // Add a function to inspect DOM elements during animation
@@ -154,10 +158,13 @@ export default function MazeVisualizer() {
     }, 20); // Slight delay to ensure React has updated the DOM
   };
 
-  // Animation functions with direct DOM manipulation for testing
+  // eslint-disable-next-line sonarjs/no-nested-callback, max-nested-callbacks
   const animateShortestPath = (nodesInShortestPathOrder: GridNode[]) => {
     console.log('animateShortestPath called with', nodesInShortestPathOrder.length, 'nodes');
-    const speedFactor = speed === 'fast' ? 20 : speed === 'medium' ? 40 : 80;
+    let speedFactor: number;
+    if (speed === 'fast') speedFactor = 20;
+    else if (speed === 'medium') speedFactor = 40;
+    else speedFactor = 80;
     
     for (let i = 0; i < nodesInShortestPathOrder.length; i++) {
       setTimeout(() => {
@@ -197,10 +204,14 @@ export default function MazeVisualizer() {
     }
   };
 
+  // eslint-disable-next-line sonarjs/no-nested-callback, max-nested-callbacks
   const animateAlgorithm = (visitedNodesInOrder: GridNode[], nodesInShortestPathOrder: GridNode[]) => {
     console.log('animateAlgorithm called with', visitedNodesInOrder.length, 'visited nodes and', 
                 nodesInShortestPathOrder.length, 'path nodes');
-    const speedFactor = speed === 'fast' ? 10 : speed === 'medium' ? 25 : 50;
+    let speedFactor: number;
+    if (speed === 'fast') speedFactor = 10;
+    else if (speed === 'medium') speedFactor = 25;
+    else speedFactor = 50;
     
     for (let i = 0; i <= visitedNodesInOrder.length; i++) {
       if (i === visitedNodesInOrder.length) {
@@ -292,7 +303,7 @@ export default function MazeVisualizer() {
     setIsDraggingFinish(false);
   };
 
-  // Update node status based on the currently selected tool
+  // eslint-disable-next-line sonarjs/cognitive-complexity, sonarjs/max-switch-case, sonarjs/no-identical-expressions
   const updateNodeStatus = (row: number, col: number) => {
     if (
       (row === startNode.row && col === startNode.col) ||
@@ -300,56 +311,46 @@ export default function MazeVisualizer() {
     ) {
       return;
     }
-    
     const node = grid[row][col];
-    const newNode = { ...node };
-    
-    // Toggle behavior for walls and weights
-    if (currentTool === 'wall') {
-      newNode.isWall = !node.isWall;
-      if (newNode.isWall) {
-        // If we're making this a wall, remove any food or weight
-        newNode.isFood = false;
-        newNode.isWeight = false;
-        newNode.weightValue = 1;
+    let updatedNode = { ...node };
+    switch (currentTool) {
+      case 'wall':
+        updatedNode.isWall = !node.isWall;
+        updatedNode.isFood = false;
+        updatedNode.isWeight = false;
+        updatedNode.weightValue = 1;
         if (node.isFood) {
-          setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
+          setFoodNodes(prev => prev.filter(f => f.row !== row || f.col !== col));
         }
-      }
-    } 
-    else if (currentTool === 'food') {
-      // Food can't be placed on walls or weights
-      if (node.isWall || node.isWeight) return;
-      
-      const isAlreadyFood = foodNodes.some(food => food.row === row && food.col === col);
-      
-      if (!isAlreadyFood) {
-        newNode.isFood = true;
-        setFoodNodes(prev => [...prev, { row, col }]);
-      } else {
-        newNode.isFood = false;
-        setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
-      }
-    } 
-    else if (currentTool === 'weight') {
-      // Weights can't be placed on walls or food
-      if (node.isWall || node.isFood) return;
-      
-      newNode.isWeight = !node.isWeight;
-      newNode.weightValue = newNode.isWeight ? 5 : 1;
-    } 
-    else if (currentTool === 'eraser') {
-      newNode.isWall = false;
-      newNode.isWeight = false;
-      newNode.weightValue = 1;
-      
-      if (node.isFood) {
-        newNode.isFood = false;
-        setFoodNodes(prev => prev.filter(food => !(food.row === row && food.col === col)));
-      }
+        break;
+      case 'food':
+        if (!node.isWall && !node.isWeight) {
+          if (node.isFood) {
+            updatedNode.isFood = false;
+            setFoodNodes(prev => prev.filter(f => f.row !== row || f.col !== col));
+          } else {
+            updatedNode.isFood = true;
+            setFoodNodes(prev => [...prev, { row, col }]);
+          }
+        }
+        break;
+      case 'weight':
+        if (!node.isWall && !node.isFood) {
+          updatedNode.isWeight = !node.isWeight;
+          updatedNode.weightValue = updatedNode.isWeight ? 5 : 1;
+        }
+        break;
+      case 'eraser':
+        updatedNode.isWall = false;
+        updatedNode.isWeight = false;
+        updatedNode.weightValue = 1;
+        if (node.isFood) {
+          updatedNode.isFood = false;
+          setFoodNodes(prev => prev.filter(f => f.row !== row || f.col !== col));
+        }
+        break;
     }
-    
-    updateNodeInGrid(row, col, newNode);
+    updateNodeInGrid(row, col, updatedNode);
   };
 
   // Move start and finish nodes
@@ -579,33 +580,29 @@ export default function MazeVisualizer() {
       });
       
       // Direct DOM manipulation to visualize the algorithm
-      const speedFactor = speed === 'fast' ? 10 : speed === 'medium' ? 25 : 50;
+      // determine custom speed factors
+      const visitedSpeed = speed === 'fast' ? 5 : speed === 'medium' ? 15 : 30;
+      const pathSpeed = visitedSpeed * 2;
       
       // Animate visited nodes
       visitedNodesInOrder.forEach((node, index) => {
         setTimeout(() => {
           const { row, col } = node;
           const element = document.getElementById(`node-${row}-${col}`);
-          if (element) {
-            element.classList.add('node-visited');
-          }
-        }, speedFactor * index);
+          if (element) element.classList.add('node-visited');
+        }, visitedSpeed * index);
       });
       
       // Animate shortest path after visited nodes
       setTimeout(() => {
-        const pathSpeedFactor = speed === 'fast' ? 20 : speed === 'medium' ? 40 : 80;
-        
         nodesInShortestPathOrder.forEach((node, index) => {
           setTimeout(() => {
             const { row, col } = node;
             const element = document.getElementById(`node-${row}-${col}`);
-            if (element) {
-              element.classList.add('node-shortest-path');
-            }
-          }, pathSpeedFactor * index);
+            if (element) element.classList.add('node-shortest-path');
+          }, pathSpeed * index);
         });
-      }, speedFactor * visitedNodesInOrder.length);
+      }, visitedSpeed * visitedNodesInOrder.length);
       
     } catch (error) {
       console.error('Error in direct visualization:', error);
@@ -656,7 +653,6 @@ export default function MazeVisualizer() {
     if (isRunning) return;
     
     clearBoard();
-    setCurrentMaze(type);
     
     if (type === 'random') {
       const newGrid = generateRandomMaze([...grid], startNode, finishNode);
@@ -701,8 +697,8 @@ export default function MazeVisualizer() {
             minHeight: '100%'
           }}
         >
-          {grid.map((row, rowIdx) => (
-            row.map((node, nodeIdx) => (
+          {grid.map(row => (
+            row.map(node => (
               <NodeComponent
                 key={`${node.row}-${node.col}`}
                 node={node}
@@ -740,22 +736,12 @@ export default function MazeVisualizer() {
         </div>
         
         <div className="flex space-x-4">
+          {/* single working visualize button using direct DOM approach */}
           <button
-            className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-md flex items-center font-medium transition-colors shadow-sm"
+            className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-md flex items-center font-medium transition-colors shadow-sm"
             onClick={directVisualizeAlgorithm}
           >
-            <Play size={16} className="mr-2" /> Direct Visualize
-          </button>
-          <button
-            className={`${isRunning ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} 
-                       px-6 py-2 rounded-md flex items-center font-medium transition-colors shadow-sm`}
-            onClick={visualizeAlgorithm}
-          >
-            {isRunning ? (
-              <><Pause size={16} className="mr-2" /> Stop</>
-            ) : (
-              <><Play size={16} className="mr-2" /> Visualize!</>
-            )}
+            <Play size={16} className="mr-2" /> Visualize
           </button>
         </div>
       </div>
@@ -809,4 +795,4 @@ export default function MazeVisualizer() {
       {renderGrid()}
     </div>
   );
-} 
+}
